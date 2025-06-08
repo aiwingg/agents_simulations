@@ -1,0 +1,25 @@
+version: '3.8'
+
+services:
+  llm-simulation-service:
+    build: .
+    ports:
+      - "5000:5000"
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - OPENAI_MODEL=${OPENAI_MODEL:-gpt-4o-mini}
+      - CONCURRENCY=${CONCURRENCY:-4}
+      - MAX_TURNS=${MAX_TURNS:-30}
+      - TIMEOUT_SEC=${TIMEOUT_SEC:-90}
+      - DEBUG=${DEBUG:-False}
+    volumes:
+      - ./results:/app/results
+      - ./logs:/app/logs
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+

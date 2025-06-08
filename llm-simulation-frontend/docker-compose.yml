@@ -1,0 +1,60 @@
+version: '3.8'
+
+services:
+  # Backend Service
+  backend:
+    build:
+      context: ../llm-simulation-service
+      dockerfile: Dockerfile
+    container_name: llm-simulation-backend
+    ports:
+      - "5000:5000"
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - OPENAI_MODEL=${OPENAI_MODEL:-gpt-4o-mini}
+      - MAX_TURNS=${MAX_TURNS:-10}
+      - TIMEOUT_SEC=${TIMEOUT_SEC:-60}
+      - CONCURRENCY=${CONCURRENCY:-5}
+      - DEBUG=${DEBUG:-false}
+      - HOST=0.0.0.0
+      - PORT=5000
+    volumes:
+      - ../llm-simulation-service/logs:/app/logs
+      - ../llm-simulation-service/results:/app/results
+    networks:
+      - llm-simulation-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Frontend Service
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: llm-simulation-frontend
+    ports:
+      - "80:80"
+    environment:
+      - VITE_API_URL=http://localhost:5000
+      - VITE_WS_BASE_URL=ws://localhost:5000
+    depends_on:
+      - backend
+    networks:
+      - llm-simulation-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+networks:
+  llm-simulation-network:
+    driver: bridge
+
+volumes:
+  logs:
+  results:
+

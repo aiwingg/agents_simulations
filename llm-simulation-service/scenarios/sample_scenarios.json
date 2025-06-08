@@ -1,0 +1,42 @@
+[
+  {
+    "name": "calm_reorder",
+    "variables": {
+      "PERSONALITY": "спокойный",
+      "AMB_LEVEL": 0,
+      "PATIENCE": 2,
+      "ORDER_GOAL": "[{\"name\":\"филе\", \"qty\":2, \"from_history\":true}]",
+      "CURRENT_DATE": "2025-06-08 Sunday",
+      "LOCATIONS": "Москва, Санкт-Петербург, Екатеринбург",
+      "DELIVERY_DAYS": "1-2 рабочих дня",
+      "PURCHASE_HISTORY": "Ранее заказывал филе курицы 3 раза"
+    }
+  },
+  {
+    "name": "impatient_new_customer",
+    "variables": {
+      "PERSONALITY": "нетерпеливый",
+      "AMB_LEVEL": 1,
+      "PATIENCE": 0,
+      "ORDER_GOAL": "[{\"name\":\"пицца\", \"qty\":1, \"from_history\":false}]",
+      "CURRENT_DATE": "2025-06-08 Sunday",
+      "LOCATIONS": "Москва, Санкт-Петербург, Екатеринбург",
+      "DELIVERY_DAYS": "1-2 рабочих дня",
+      "PURCHASE_HISTORY": "Новый клиент"
+    }
+  },
+  {
+    "name": "confused_large_order",
+    "variables": {
+      "PERSONALITY": "растерянный",
+      "AMB_LEVEL": 3,
+      "PATIENCE": 1,
+      "ORDER_GOAL": "[{\"name\":\"суши\", \"qty\":5}, {\"name\":\"роллы\", \"qty\":3}]",
+      "CURRENT_DATE": "2025-06-08 Sunday",
+      "LOCATIONS": "Москва, Санкт-Петербург, Екатеринбург",
+      "DELIVERY_DAYS": "1-2 рабочих дня",
+      "PURCHASE_HISTORY": "Заказывал суши 1 раз месяц назад"
+    }
+  }
+]
+
