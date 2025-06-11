@@ -115,9 +115,7 @@ Scenarios are defined in JSON format with the following structure:
       "PATIENCE": 2,
       "ORDER_GOAL": "[{\"name\":\"филе\", \"qty\":2, \"from_history\":true}]",
       "CURRENT_DATE": "2025-06-08 Sunday",
-      "LOCATIONS": "Москва, Санкт-Петербург, Екатеринбург",
-      "DELIVERY_DAYS": "1-2 рабочих дня",
-      "PURCHASE_HISTORY": "Ранее заказывал филе курицы 3 раза",
+      "client_id": "9525751940",
       "SEED": 12345
     }
   }
@@ -131,13 +129,43 @@ Scenarios are defined in JSON format with the following structure:
 - **PATIENCE**: Patience level (0=very impatient, 3=very patient)
 - **ORDER_GOAL**: JSON string describing what the customer wants to order
 - **CURRENT_DATE**: Current date for the simulation
-- **LOCATIONS**: Available delivery locations
-- **DELIVERY_DAYS**: Delivery timeframe information
-- **PURCHASE_HISTORY**: Customer's previous order history
+- **client_id**: Client identifier used to fetch dynamic data (locations, delivery days, purchase history)
 - **SEED**: Optional random seed for deterministic results
 
+#### Dynamic Data Retrieval
 
+When a `client_id` is provided in the scenario, the system automatically:
 
+1. Makes a POST request to `https://aiwingg.com/rag/webhook`
+2. Sends payload: `{"call_inbound": {"from_number": "client_id"}}`
+3. Extracts dynamic variables from `response.call_inbound.dynamic_variables`:
+   - `location` → Used as `LOCATIONS` in prompts
+   - `delivery_days` → Used as `DELIVERY_DAYS` in prompts
+   - `purchase_history` → Used as `PURCHASE_HISTORY` in prompts
+   - `session_id` → Used as the session identifier for all subsequent tool calls and logging
+
+If the webhook call fails or `client_id` is not provided, fallback values are used for variables and a new session_id is generated.
+
+#### Legacy Format Support
+
+For backward compatibility, you can still use hardcoded values:
+
+```json
+{
+  "name": "legacy_scenario",
+  "variables": {
+    "PERSONALITY": "спокойный",
+    "AMB_LEVEL": 0,
+    "PATIENCE": 2,
+    "ORDER_GOAL": "[{\"name\":\"филе\", \"qty\":2}]",
+    "CURRENT_DATE": "2025-06-08 Sunday",
+    "LOCATIONS": "Москва, Санкт-Петербург, Екатеринбург",
+    "DELIVERY_DAYS": "1-2 рабочих дня",
+    "PURCHASE_HISTORY": "Ранее заказывал филе курицы 3 раза",
+    "SEED": 12345
+  }
+}
+```
 
 ## REST API Reference
 

@@ -319,7 +319,8 @@ class BatchProcessor:
                         'comment': evaluation_result.get('comment'),
                         'evaluation_status': evaluation_result.get('evaluation_status'),
                         'start_time': conversation_result.get('start_time'),
-                        'end_time': conversation_result.get('end_time')
+                        'end_time': conversation_result.get('end_time'),
+                        'conversation_history': conversation_result.get('conversation_history')
                     }
                 else:
                     # Conversation failed
