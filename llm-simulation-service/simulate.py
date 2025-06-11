@@ -58,7 +58,7 @@ class SimulateCLI:
         
         # Create batch processor
         processor = BatchProcessor(Config.OPENAI_API_KEY, Config.CONCURRENCY)
-        batch_id = processor.create_batch_job(scenarios)
+        batch_id = processor.create_batch_job(scenarios, use_tools=True)
         
         print(f"Created batch job: {batch_id}")
         print(f"Running with concurrency: {Config.CONCURRENCY}")
@@ -152,9 +152,9 @@ class SimulateCLI:
         conversation_engine = ConversationEngine(openai_wrapper)
         evaluator = ConversationEvaluator(openai_wrapper)
         
-        # Run conversation
+        # Run conversation with tools
         async def run_conversation():
-            result = await conversation_engine.run_conversation(scenario)
+            result = await conversation_engine.run_conversation_with_tools(scenario)
             
             if stream and result.get('status') == 'completed':
                 print("\n=== CONVERSATION ===")

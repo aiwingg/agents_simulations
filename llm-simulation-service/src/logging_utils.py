@@ -39,36 +39,40 @@ class SimulationLogger:
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
         batch_suffix = f"_{self.batch_id}" if self.batch_id else ""
         
-        # App log handler
+        # App log handler with UTF-8 encoding
         app_handler = logging.FileHandler(
-            os.path.join(Config.LOGS_DIR, f'app_{timestamp}{batch_suffix}.log')
+            os.path.join(Config.LOGS_DIR, f'app_{timestamp}{batch_suffix}.log'),
+            encoding='utf-8'
         )
         app_handler.setFormatter(logging.Formatter(
             '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
         ))
         self.app_logger.addHandler(app_handler)
         
-        # Error log handler
+        # Error log handler with UTF-8 encoding
         error_handler = logging.FileHandler(
-            os.path.join(Config.LOGS_DIR, f'error_{timestamp}{batch_suffix}.log')
+            os.path.join(Config.LOGS_DIR, f'error_{timestamp}{batch_suffix}.log'),
+            encoding='utf-8'
         )
         error_handler.setFormatter(logging.Formatter(
             '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
         ))
         self.error_logger.addHandler(error_handler)
         
-        # Token log handler
+        # Token log handler with UTF-8 encoding
         token_handler = logging.FileHandler(
-            os.path.join(Config.LOGS_DIR, f'tokens_{timestamp}{batch_suffix}.log')
+            os.path.join(Config.LOGS_DIR, f'tokens_{timestamp}{batch_suffix}.log'),
+            encoding='utf-8'
         )
         token_handler.setFormatter(logging.Formatter(
             '%(asctime)s - %(message)s'
         ))
         self.token_logger.addHandler(token_handler)
         
-        # Conversation log handler (JSON format)
+        # Conversation log handler (JSON format) with UTF-8 encoding
         conversation_handler = logging.FileHandler(
-            os.path.join(Config.LOGS_DIR, f'conversations_{timestamp}{batch_suffix}.jsonl')
+            os.path.join(Config.LOGS_DIR, f'conversations_{timestamp}{batch_suffix}.jsonl'),
+            encoding='utf-8'
         )
         conversation_handler.setFormatter(logging.Formatter('%(message)s'))
         self.conversation_logger.addHandler(conversation_handler)
@@ -76,13 +80,13 @@ class SimulationLogger:
     def log_info(self, message: str, extra_data: Optional[Dict[str, Any]] = None):
         """Log info message"""
         if extra_data:
-            message = f"{message} - {json.dumps(extra_data)}"
+            message = f"{message} - {json.dumps(extra_data, ensure_ascii=False)}"
         self.app_logger.info(message)
     
     def log_error(self, message: str, exception: Optional[Exception] = None, extra_data: Optional[Dict[str, Any]] = None):
         """Log error message"""
         if extra_data:
-            message = f"{message} - {json.dumps(extra_data)}"
+            message = f"{message} - {json.dumps(extra_data, ensure_ascii=False)}"
         if exception:
             self.error_logger.error(message, exc_info=exception)
         else:
@@ -99,7 +103,7 @@ class SimulationLogger:
             'cost_estimate': cost_estimate,
             'timestamp': datetime.now().isoformat()
         }
-        self.token_logger.info(json.dumps(token_data))
+        self.token_logger.info(json.dumps(token_data, ensure_ascii=False))
     
     def log_conversation_turn(self, session_id: str, turn_number: int, role: str, content: str, tool_calls: Optional[list] = None, tool_results: Optional[list] = None):
         """Log detailed conversation turn"""
@@ -112,7 +116,7 @@ class SimulationLogger:
             'tool_results': tool_results,
             'timestamp': datetime.now().isoformat()
         }
-        self.conversation_logger.info(json.dumps(turn_data))
+        self.conversation_logger.info(json.dumps(turn_data, ensure_ascii=False))
     
     def log_conversation_complete(self, session_id: str, total_turns: int, final_score: Optional[int] = None, evaluator_comment: Optional[str] = None, status: str = 'completed'):
         """Log conversation completion"""
@@ -125,7 +129,7 @@ class SimulationLogger:
             'timestamp': datetime.now().isoformat(),
             'event_type': 'conversation_complete'
         }
-        self.conversation_logger.info(json.dumps(completion_data))
+        self.conversation_logger.info(json.dumps(completion_data, ensure_ascii=False))
 
 # Global logger instance
 _global_logger: Optional[SimulationLogger] = None

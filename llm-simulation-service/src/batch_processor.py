@@ -32,6 +32,7 @@ class BatchJob:
     status: BatchStatus
     created_at: datetime
     prompt_version: str = "v1.0"
+    use_tools: bool = True
     started_at: Optional[datetime] = None
     completed_at: Optional[datetime] = None
     total_scenarios: int = 0
@@ -84,6 +85,7 @@ class BatchProcessor:
                     status=BatchStatus(batch_data['status']),
                     created_at=batch_data['created_at'],
                     prompt_version=batch_data.get('prompt_version', 'v1.0'),
+                    use_tools=batch_data.get('use_tools', True),
                     started_at=batch_data.get('started_at'),
                     completed_at=batch_data.get('completed_at'),
                     total_scenarios=batch_data.get('total_scenarios', 0),
@@ -112,6 +114,7 @@ class BatchProcessor:
                 'status': batch_job.status.value,  # Convert enum to string
                 'created_at': batch_job.created_at,
                 'prompt_version': batch_job.prompt_version,
+                'use_tools': batch_job.use_tools,
                 'started_at': batch_job.started_at,
                 'completed_at': batch_job.completed_at,
                 'total_scenarios': batch_job.total_scenarios,
@@ -125,7 +128,7 @@ class BatchProcessor:
         except Exception as e:
             self.logger.log_error(f"Failed to save batch to storage", exception=e, extra_data={'batch_id': batch_job.batch_id})
     
-    def create_batch_job(self, scenarios: List[Dict[str, Any]], prompt_version: str = "v1.0") -> str:
+    def create_batch_job(self, scenarios: List[Dict[str, Any]], prompt_version: str = "v1.0", use_tools: bool = True) -> str:
         """Create a new batch job"""
         batch_id = str(uuid.uuid4())
         
@@ -135,6 +138,7 @@ class BatchProcessor:
             status=BatchStatus.PENDING,
             created_at=datetime.now(),
             prompt_version=prompt_version,
+            use_tools=use_tools,
             total_scenarios=len(scenarios)
         )
         
@@ -160,6 +164,7 @@ class BatchProcessor:
             'batch_id': batch_id,
             'status': job.status.value,
             'prompt_version': job.prompt_version,
+            'use_tools': job.use_tools,
             'progress': job.progress_percentage,
             'total_scenarios': job.total_scenarios,
             'completed_scenarios': job.completed_scenarios,
@@ -291,8 +296,12 @@ class BatchProcessor:
                 
                 self.logger.log_info(f"Processing scenario {scenario_index}: {scenario_name}", extra_data={'batch_id': batch_id})
                 
-                # Run conversation
-                conversation_result = await self.conversation_engine.run_conversation(scenario)
+                # Run conversation (with or without tools based on batch setting)
+                job = self.active_jobs[batch_id]
+                if job.use_tools:
+                    conversation_result = await self.conversation_engine.run_conversation_with_tools(scenario)
+                else:
+                    conversation_result = await self.conversation_engine.run_conversation(scenario)
                 
                 # Evaluate conversation if successful
                 if conversation_result.get('status') == 'completed':

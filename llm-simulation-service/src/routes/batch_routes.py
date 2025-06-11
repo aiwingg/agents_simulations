@@ -58,9 +58,10 @@ def launch_batch():
         # Create batch job
         processor = get_batch_processor()
         
-        # Add prompt_version to the batch data
+        # Add prompt_version and use_tools to the batch data
         prompt_version = data.get('prompt_version', 'v1.0')
-        batch_id = processor.create_batch_job(scenarios, prompt_version)
+        use_tools = data.get('use_tools', True)
+        batch_id = processor.create_batch_job(scenarios, prompt_version, use_tools)
         
         # Start batch processing in background
         def run_batch_async():

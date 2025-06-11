@@ -33,7 +33,8 @@ class OpenAIWrapper:
                                      session_id: str, 
                                      temperature: float = 0.7,
                                      seed: Optional[int] = None,
-                                     response_format: Optional[Dict[str, str]] = None) -> Tuple[str, Dict[str, int]]:
+                                     response_format: Optional[Dict[str, str]] = None,
+                                     tools: Optional[List[Dict[str, Any]]] = None) -> Tuple[Any, Dict[str, int]]:
         """Make OpenAI API request with retry logic"""
         
         for attempt in range(self.max_retries):
@@ -52,11 +53,21 @@ class OpenAIWrapper:
                     if response_format:
                         request_params['response_format'] = response_format
                     
+                    if tools:
+                        request_params['tools'] = tools
+                        request_params['tool_choice'] = 'auto'
+                    
                     # Make the API call
                     response = await self.client.chat.completions.create(**request_params)
                     
                     # Extract response data
-                    content = response.choices[0].message.content
+                    message = response.choices[0].message
+                    
+                    # Return the full message object if tools were used, otherwise just content
+                    if tools and hasattr(message, 'tool_calls') and message.tool_calls:
+                        content = message  # Return full message object with tool_calls
+                    else:
+                        content = message.content
                     usage = {
                         'prompt_tokens': response.usage.prompt_tokens,
                         'completion_tokens': response.usage.completion_tokens,
@@ -108,13 +119,15 @@ class OpenAIWrapper:
     async def chat_completion(self, messages: List[Dict[str, str]], 
                             session_id: str,
                             temperature: float = 0.7,
-                            seed: Optional[int] = None) -> Tuple[str, Dict[str, int]]:
+                            seed: Optional[int] = None,
+                            tools: Optional[List[Dict[str, Any]]] = None) -> Tuple[Any, Dict[str, int]]:
         """Standard chat completion"""
         return await self._make_request_with_retry(
             messages=messages,
             session_id=session_id,
             temperature=temperature,
-            seed=seed
+            seed=seed,
+            tools=tools
         )
     
     async def json_completion(self, messages: List[Dict[str, str]], 

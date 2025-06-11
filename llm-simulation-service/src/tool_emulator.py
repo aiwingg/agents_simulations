@@ -2,7 +2,7 @@
 Tool emulation system for conversation simulation
 """
 import json
-import random
+import aiohttp
 from typing import Dict, Any, List, Optional
 from src.logging_utils import get_logger
 
@@ -12,170 +12,265 @@ class ToolEmulator:
     def __init__(self):
         self.logger = get_logger()
         
-        # Sample data for tool responses
-        self.menu_items = [
-            {"name": "филе курицы", "price": 450, "category": "мясо"},
-            {"name": "пицца маргарита", "price": 650, "category": "пицца"},
-            {"name": "суши сет", "price": 890, "category": "суши"},
-            {"name": "роллы филадельфия", "price": 520, "category": "роллы"},
-            {"name": "борщ", "price": 280, "category": "супы"},
-            {"name": "салат цезарь", "price": 380, "category": "салаты"}
-        ]
-        
-        self.delivery_zones = [
-            {"zone": "центр", "delivery_time": "30-45 мин", "fee": 0},
-            {"zone": "север", "delivery_time": "45-60 мин", "fee": 100},
-            {"zone": "юг", "delivery_time": "40-55 мин", "fee": 80},
-            {"zone": "восток", "delivery_time": "50-65 мин", "fee": 120},
-            {"zone": "запад", "delivery_time": "35-50 мин", "fee": 90}
-        ]
+        # API base URL
+        self.base_url = "https://aiwingg.com/rag"
     
     async def call_tool(self, tool_name: str, parameters: Dict[str, Any], session_id: str) -> Dict[str, Any]:
         """Simulate calling an external tool"""
         
-        self.logger.log_info(f"Tool call: {tool_name}", extra_data={
-            'session_id': session_id,
-            'parameters': parameters
+        self.logger.log_info(f"🔧 TOOL CALL INITIATED", {
+            "tool_name": tool_name,
+            "session_id": session_id,
+            "parameters": parameters
         })
         
         try:
-            if tool_name == "search_menu":
-                return await self._search_menu(parameters)
-            elif tool_name == "check_availability":
-                return await self._check_availability(parameters)
-            elif tool_name == "calculate_delivery":
-                return await self._calculate_delivery(parameters)
-            elif tool_name == "create_order":
-                return await self._create_order(parameters)
-            elif tool_name == "get_customer_history":
-                return await self._get_customer_history(parameters)
+            if tool_name == "rag_find_products":
+                return await self._rag_find_products(parameters, session_id)
+            elif tool_name == "remove_from_cart":
+                return await self._remove_from_cart(parameters, session_id)
+            elif tool_name == "set_current_location":
+                return await self._set_current_location(parameters, session_id)
+            elif tool_name == "get_cart":
+                return await self._get_current_cart(parameters, session_id)
+            elif tool_name == "change_delivery_date":
+                return await self._change_delivery_date(parameters, session_id)
+            elif tool_name == "add_to_cart":
+                return await self._add_to_cart(parameters, session_id)
             else:
-                return {"error": f"Unknown tool: {tool_name}"}
+                error_msg = f"Unknown tool: {tool_name}"
+                self.logger.log_error(f"❌ UNKNOWN TOOL", None, {
+                    "tool_name": tool_name,
+                    "session_id": session_id,
+                    "error": error_msg
+                })
+                return {"result": f"Ошибка: неизвестный инструмент {tool_name}"}
                 
         except Exception as e:
-            self.logger.log_error(f"Tool emulation error for {tool_name}", exception=e)
-            return {"error": f"Tool execution failed: {str(e)}"}
+            self.logger.log_error(f"❌ TOOL CALL EXCEPTION", e, {
+                "tool_name": tool_name,
+                "session_id": session_id,
+                "parameters": parameters
+            })
+            return {"result": "Ошибка при выполнении запроса"}
     
-    async def _search_menu(self, parameters: Dict[str, Any]) -> Dict[str, Any]:
-        """Emulate menu search"""
-        query = parameters.get("query", "").lower()
-        category = parameters.get("category", "").lower()
+    async def _make_api_request(self, endpoint: str, payload: Dict[str, Any], session_id: str, tool_name: str) -> Dict[str, Any]:
+        """Make HTTP request to external API with detailed logging"""
         
-        results = []
-        for item in self.menu_items:
-            if (not query or query in item["name"].lower()) and \
-               (not category or category in item["category"].lower()):
-                results.append(item)
+        url = f"{self.base_url}{endpoint}"
         
-        return {
-            "status": "success",
-            "results": results,
-            "total_found": len(results)
+        self.logger.log_info(f"🌐 HTTP REQUEST INITIATED", {
+            "tool_name": tool_name,
+            "session_id": session_id,
+            "method": "POST",
+            "url": url,
+            "payload": payload
+        })
+        
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.post(url, json=payload) as response:
+                    response_status = response.status
+                    response_headers = dict(response.headers)
+                    
+                    try:
+                        response_data = await response.json()
+                    except:
+                        response_text = await response.text()
+                        response_data = {"raw_text": response_text}
+                    
+                    self.logger.log_info(f"📡 HTTP RESPONSE RECEIVED", {
+                        "tool_name": tool_name,
+                        "session_id": session_id,
+                        "status_code": response_status,
+                        "headers": response_headers,
+                        "response_data": response_data
+                    })
+                    
+                    if response_status == 200:
+                        self.logger.log_info(f"✅ API CALL SUCCESS", {
+                            "tool_name": tool_name,
+                            "session_id": session_id,
+                            "result": response_data
+                        })
+                        return response_data
+                    else:
+                        self.logger.log_error(f"❌ API CALL HTTP ERROR", None, {
+                            "tool_name": tool_name,
+                            "session_id": session_id,
+                            "status_code": response_status,
+                            "response": response_data
+                        })
+                        return {"result": f"HTTP Error {response_status}: {response_data}"}
+                        
+        except aiohttp.ClientError as e:
+            self.logger.log_error(f"❌ HTTP CLIENT ERROR", e, {
+                "tool_name": tool_name,
+                "session_id": session_id,
+                "url": url,
+                "payload": payload
+            })
+            return {"result": f"Ошибка соединения: {str(e)}"}
+        except Exception as e:
+            self.logger.log_error(f"❌ UNEXPECTED API ERROR", e, {
+                "tool_name": tool_name,
+                "session_id": session_id,
+                "url": url,
+                "payload": payload
+            })
+            return {"result": f"Неожиданная ошибка: {str(e)}"}
+    
+    async def _set_current_location(self, parameters: Dict[str, Any], session_id: str) -> Dict[str, Any]:
+        """Set current location for delivery"""
+        
+        payload = {
+            "call": {
+                "retell_llm_dynamic_variables": {
+                    "session_id": session_id
+                }
+            },
+            "args": parameters
         }
+        
+        result = await self._make_api_request("/set_current_location", payload, session_id, "set_current_location")
+        
+        self.logger.log_info(f"🏠 SET_CURRENT_LOCATION RESULT", {
+            "session_id": session_id,
+            "parameters": parameters,
+            "result": result
+        })
+        
+        return result
     
-    async def _check_availability(self, parameters: Dict[str, Any]) -> Dict[str, Any]:
-        """Emulate availability check"""
-        item_name = parameters.get("item_name", "")
-        quantity = parameters.get("quantity", 1)
+    async def _change_delivery_date(self, parameters: Dict[str, Any], session_id: str) -> Dict[str, Any]:
+        """Set current location for delivery"""
         
-        # Simulate random availability
-        available = random.choice([True, True, True, False])  # 75% chance available
-        
-        if available:
-            return {
-                "status": "available",
-                "item": item_name,
-                "quantity_available": quantity + random.randint(0, 10),
-                "estimated_prep_time": f"{random.randint(15, 45)} мин"
-            }
-        else:
-            return {
-                "status": "unavailable",
-                "item": item_name,
-                "reason": "временно отсутствует",
-                "alternatives": random.sample([item["name"] for item in self.menu_items], 2)
-            }
-    
-    async def _calculate_delivery(self, parameters: Dict[str, Any]) -> Dict[str, Any]:
-        """Emulate delivery calculation"""
-        address = parameters.get("address", "")
-        
-        # Simulate zone detection
-        zone_info = random.choice(self.delivery_zones)
-        
-        return {
-            "status": "success",
-            "zone": zone_info["zone"],
-            "delivery_time": zone_info["delivery_time"],
-            "delivery_fee": zone_info["fee"],
-            "address": address
+        payload = {
+            "call": {
+                "retell_llm_dynamic_variables": {
+                    "session_id": session_id
+                } 
+            },
+            "args": parameters
         }
-    
-    async def _create_order(self, parameters: Dict[str, Any]) -> Dict[str, Any]:
-        """Emulate order creation"""
-        items = parameters.get("items", [])
-        customer_info = parameters.get("customer_info", {})
         
-        order_id = f"ORD-{random.randint(10000, 99999)}"
-        total_amount = sum(item.get("price", 0) * item.get("quantity", 1) for item in items)
+        result = await self._make_api_request("/set_current_location", payload, session_id, "add_to_cart")
         
-        return {
-            "status": "created",
-            "order_id": order_id,
-            "total_amount": total_amount,
-            "estimated_delivery": f"{random.randint(30, 60)} мин",
-            "items": items,
-            "customer": customer_info
+        self.logger.log_info(f"🛒 ADD_TO_CART RESULT", {
+            "session_id": session_id,
+            "parameters": parameters,
+            "result": result
+        })
+        
+        return result
+  
+    async def _remove_from_cart(self, parameters: Dict[str, Any], session_id: str) -> Dict[str, Any]:
+        """Remove items from shopping cart"""
+        
+        payload = {
+            "call": {
+                "retell_llm_dynamic_variables": {
+                    "session_id": session_id
+                }
+            },
+            "args": parameters
         }
-    
-    async def _get_customer_history(self, parameters: Dict[str, Any]) -> Dict[str, Any]:
-        """Emulate customer history lookup"""
-        phone = parameters.get("phone", "")
         
-        # Simulate customer history
-        has_history = random.choice([True, False])
+        result = await self._make_api_request("/add_to_cart", payload, session_id, "add_to_cart")
         
-        if has_history:
-            return {
-                "status": "found",
-                "customer_id": f"CUST-{random.randint(1000, 9999)}",
-                "previous_orders": random.randint(1, 15),
-                "favorite_items": random.sample([item["name"] for item in self.menu_items], 2),
-                "last_order_date": "2025-05-28"
-            }
-        else:
-            return {
-                "status": "not_found",
-                "message": "новый клиент"
-            }
+        self.logger.log_info(f"🛒 ADD_TO_CART RESULT", {
+            "session_id": session_id,
+            "parameters": parameters,
+            "result": result
+        })
+        
+        return result
+
+    async def _rag_find_products(self, parameters: Dict[str, Any], session_id: str) -> Dict[str, Any]:
+        """Find products using RAG search"""
+        
+        payload = {
+            "call": {
+                "retell_llm_dynamic_variables": {
+                    "session_id": session_id
+                }
+            },
+            "args": parameters
+        }
+        
+        result = await self._make_api_request("/rag_find_products", payload, session_id, "rag_find_products")
+        
+        self.logger.log_info(f"🔍 RAG_FIND_PRODUCTS RESULT", {
+            "session_id": session_id,
+            "parameters": parameters,
+            "result": result
+        })
+        
+        return result
     
-    def get_available_tools(self) -> List[Dict[str, Any]]:
-        """Get list of available tools and their descriptions"""
-        return [
-            {
-                "name": "search_menu",
-                "description": "Search menu items by name or category",
-                "parameters": ["query", "category"]
+    async def _add_to_cart(self, parameters: Dict[str, Any], session_id: str) -> Dict[str, Any]:
+        """Add items to shopping cart"""
+        
+        payload = {
+            "call": {
+                "retell_llm_dynamic_variables": {
+                    "session_id": session_id
+                }
             },
-            {
-                "name": "check_availability",
-                "description": "Check if item is available in requested quantity",
-                "parameters": ["item_name", "quantity"]
+            "args": parameters
+        }
+        
+        result = await self._make_api_request("/add_to_cart", payload, session_id, "add_to_cart")
+        
+        self.logger.log_info(f"🛒 ADD_TO_CART RESULT", {
+            "session_id": session_id,
+            "parameters": parameters,
+            "result": result
+        })
+        
+        return result
+    
+    async def _get_current_cart(self, parameters: Dict[str, Any], session_id: str) -> Dict[str, Any]:
+        """Get current cart contents"""
+        
+        payload = {
+            "call": {
+                "retell_llm_dynamic_variables": {
+                    "session_id": session_id
+                }
             },
-            {
-                "name": "calculate_delivery",
-                "description": "Calculate delivery time and fee for address",
-                "parameters": ["address"]
+            "args": parameters
+        }
+        
+        result = await self._make_api_request("/get_cart", payload, session_id, "get_cart")
+        
+        self.logger.log_info(f"📋 GET_CURRENT_CART RESULT", {
+            "session_id": session_id,
+            "parameters": parameters,
+            "result": result
+        })
+        
+        return result
+    
+    async def _confirm_order(self, parameters: Dict[str, Any], session_id: str) -> Dict[str, Any]:
+        """Confirm and finalize order"""
+        
+        payload = {
+            "call": {
+                "retell_llm_dynamic_variables": {
+                    "session_id": session_id
+                }
             },
-            {
-                "name": "create_order",
-                "description": "Create new order with items and customer info",
-                "parameters": ["items", "customer_info"]
-            },
-            {
-                "name": "get_customer_history",
-                "description": "Get customer order history by phone number",
-                "parameters": ["phone"]
-            }
-        ]
+            "args": parameters
+        }
+        
+        result = await self._make_api_request("/confirm_order", payload, session_id, "confirm_order")
+        
+        self.logger.log_info(f"✅ CONFIRM_ORDER RESULT", {
+            "session_id": session_id,
+            "parameters": parameters,
+            "result": result
+        })
+        
+        return result
 

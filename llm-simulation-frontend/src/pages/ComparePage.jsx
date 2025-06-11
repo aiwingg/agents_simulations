@@ -116,8 +116,8 @@ const ComparePage = () => {
   // Process comparison data
   const processedData = useMemo(() => {
     try {
-      const data = [];
-      
+    const data = [];
+    
       (selectedBatches || []).forEach((batchId, index) => {
         if (!batchId) {
           console.warn('Empty batchId at index', index);
@@ -126,7 +126,7 @@ const ComparePage = () => {
 
         const resultsQuery = batchQueries?.[index]?.results;
         const summaryQuery = batchQueries?.[index]?.summary;
-        
+      
         console.log(`Processing batch ${batchId}:`, {
           resultsQuery: resultsQuery?.data ? 'has data' : 'no data',
           summaryQuery: summaryQuery?.data ? 'has data' : 'no data',
@@ -137,37 +137,37 @@ const ComparePage = () => {
         // Only process if both queries succeeded and have data
         if (resultsQuery?.data && summaryQuery?.data && 
             !resultsQuery.error && !summaryQuery.error) {
-          const results = resultsQuery.data.results || [];
-          const summary = summaryQuery.data;
+        const results = resultsQuery.data.results || [];
+        const summary = summaryQuery.data;
           
           // Ensure results is an array before processing
           if (!Array.isArray(results)) {
             console.warn(`Results for batch ${batchId} is not an array:`, results);
             return;
           }
-          
-          // Calculate score distribution
-          const scoreDistribution = {
+        
+        // Calculate score distribution
+        const scoreDistribution = {
             score_1: (results || []).filter(r => r && r.score === 1).length,
             score_2: (results || []).filter(r => r && r.score === 2).length,
             score_3: (results || []).filter(r => r && r.score === 3).length,
-          };
-          
-          data.push({
+        };
+        
+        data.push({
             batchId: batchId?.slice?.(0, 8) || 'unknown',
-            fullBatchId: batchId,
+          fullBatchId: batchId,
             totalSessions: results.length || 0,
             meanScore: Number.isNaN(summary?.score_statistics?.mean) ? 0 : (summary?.score_statistics?.mean || 0),
             medianScore: Number.isNaN(summary?.score_statistics?.median) ? 0 : (summary?.score_statistics?.median || 0),
             successRate: Number.isNaN(summary?.success_rate) ? 0 : (summary?.success_rate || 0),
-            scoreDistribution,
-            results,
-            summary,
-          });
-        }
-      });
-      
-      return data;
+          scoreDistribution,
+          results,
+          summary,
+        });
+      }
+    });
+    
+    return data;
     } catch (error) {
       console.error('Error processing comparison data:', error);
       return [];
@@ -440,42 +440,42 @@ const ComparePage = () => {
 
           {/* Charts */}
           {chartData.histogramData && chartData.histogramData.length > 0 && processedData.length > 0 ? (
-            <Grid container spacing={3}>
-              {/* Score Distribution Histogram */}
-              <Grid item xs={12} lg={8}>
-                <Card>
-                  <CardContent>
-                    <Typography variant="h6" gutterBottom>
-                      Score Distribution Comparison
-                    </Typography>
-                    <ResponsiveContainer width="100%" height={400}>
-                      <BarChart data={chartData.histogramData}>
-                        <CartesianGrid strokeDasharray="3 3" />
-                        <XAxis dataKey="score" />
+          <Grid container spacing={3}>
+            {/* Score Distribution Histogram */}
+            <Grid item xs={12} lg={8}>
+              <Card>
+                <CardContent>
+                  <Typography variant="h6" gutterBottom>
+                    Score Distribution Comparison
+                  </Typography>
+                  <ResponsiveContainer width="100%" height={400}>
+                    <BarChart data={chartData.histogramData}>
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis dataKey="score" />
                         <YAxis domain={[0, 'dataMax']} />
-                        <RechartsTooltip />
-                        <Legend />
-                        {processedData.map((batch, index) => (
-                          <Bar
-                            key={batch.fullBatchId}
-                            dataKey={batch.batchId}
-                            fill={COLORS[index % COLORS.length]}
-                            name={`Batch ${batch.batchId}`}
-                          />
-                        ))}
-                      </BarChart>
-                    </ResponsiveContainer>
-                  </CardContent>
-                </Card>
-              </Grid>
+                      <RechartsTooltip />
+                      <Legend />
+                      {processedData.map((batch, index) => (
+                        <Bar
+                          key={batch.fullBatchId}
+                          dataKey={batch.batchId}
+                          fill={COLORS[index % COLORS.length]}
+                          name={`Batch ${batch.batchId}`}
+                        />
+                      ))}
+                    </BarChart>
+                  </ResponsiveContainer>
+                </CardContent>
+              </Card>
+            </Grid>
 
               {/* Simple Metrics Table instead of horizontal chart */}
-              <Grid item xs={12} lg={4}>
-                <Card>
-                  <CardContent>
-                    <Typography variant="h6" gutterBottom>
-                      Performance Metrics
-                    </Typography>
+            <Grid item xs={12} lg={4}>
+              <Card>
+                <CardContent>
+                  <Typography variant="h6" gutterBottom>
+                    Performance Metrics
+                  </Typography>
                     {processedData.map((batch, index) => (
                       <Paper key={batch.fullBatchId} sx={{ p: 2, mb: 2, backgroundColor: COLORS[index % COLORS.length] + '20' }}>
                         <Typography variant="subtitle1" sx={{ fontWeight: 'bold', color: COLORS[index % COLORS.length] }}>
@@ -494,10 +494,10 @@ const ComparePage = () => {
                         </Box>
                       </Paper>
                     ))}
-                  </CardContent>
-                </Card>
-              </Grid>
+                </CardContent>
+              </Card>
             </Grid>
+          </Grid>
           ) : (
             <Card>
               <CardContent sx={{ textAlign: 'center', py: 4 }}>
