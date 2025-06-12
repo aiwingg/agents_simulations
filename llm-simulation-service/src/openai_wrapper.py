@@ -90,11 +90,26 @@ class OpenAIWrapper:
                     return content, usage
                     
             except Exception as e:
-                self.logger.log_error(
-                    f"OpenAI API request failed (attempt {attempt + 1}/{self.max_retries})",
-                    exception=e,
-                    extra_data={'session_id': session_id, 'model': self.model}
-                )
+                error_context = {
+                    'session_id': session_id, 
+                    'model': self.model,
+                    'attempt': attempt + 1,
+                    'max_retries': self.max_retries,
+                    'error_type': type(e).__name__,
+                    'messages_count': len(messages),
+                    'has_tools': bool(tools),
+                    'temperature': temperature
+                }
+                
+                # Log different types of OpenAI errors differently
+                if 'rate_limit' in str(e).lower():
+                    self.logger.log_error(f"OpenAI rate limit exceeded (attempt {attempt + 1}/{self.max_retries})", exception=e, extra_data=error_context)
+                elif 'timeout' in str(e).lower():
+                    self.logger.log_error(f"OpenAI request timeout (attempt {attempt + 1}/{self.max_retries})", exception=e, extra_data=error_context)
+                elif 'quota' in str(e).lower():
+                    self.logger.log_error(f"OpenAI quota exceeded (attempt {attempt + 1}/{self.max_retries})", exception=e, extra_data=error_context)
+                else:
+                    self.logger.log_error(f"OpenAI API request failed (attempt {attempt + 1}/{self.max_retries}): {str(e)}", exception=e, extra_data=error_context)
                 
                 if attempt == self.max_retries - 1:
                     raise e

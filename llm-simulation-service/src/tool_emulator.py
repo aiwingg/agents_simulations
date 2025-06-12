@@ -7,6 +7,7 @@ from typing import Dict, Any, List, Optional
 from src.logging_utils import get_logger
 import ssl
 import certifi
+import asyncio
 
 ssl_context = ssl.create_default_context(cafile=certifi.where())
 
@@ -58,8 +59,8 @@ class ToolEmulator:
             })
             return {"result": "Ошибка при выполнении запроса"}
     
-    async def _make_api_request(self, endpoint: str, payload: Dict[str, Any], session_id: str, tool_name: str) -> Dict[str, Any]:
-        """Make HTTP request to external API with detailed logging"""
+    async def _make_api_request(self, endpoint: str, payload: Dict[str, Any], session_id: str, tool_name: str, max_retries: int = 2) -> Dict[str, Any]:
+        """Make HTTP request to external API with detailed logging and retry logic"""
         
         url = f"{self.base_url}{endpoint}"
         
@@ -71,58 +72,115 @@ class ToolEmulator:
             "payload": payload
         })
         
-        try:
-            async with aiohttp.ClientSession() as session:
-                async with session.post(url, json=payload, ssl=ssl_context) as response:
-                    response_status = response.status
-                    response_headers = dict(response.headers)
-                    
-                    try:
-                        response_data = await response.json()
-                    except:
-                        response_text = await response.text()
-                        response_data = {"raw_text": response_text}
-                    
-                    self.logger.log_info(f"📡 HTTP RESPONSE RECEIVED", {
-                        "tool_name": tool_name,
-                        "session_id": session_id,
-                        "status_code": response_status,
-                        "headers": response_headers,
-                        "response_data": response_data
-                    })
-                    
-                    if response_status == 200:
-                        self.logger.log_info(f"✅ API CALL SUCCESS", {
-                            "tool_name": tool_name,
-                            "session_id": session_id,
-                            "result": response_data
-                        })
-                        return response_data
-                    else:
-                        self.logger.log_error(f"❌ API CALL HTTP ERROR", None, {
+        for attempt in range(max_retries + 1):
+            try:
+                timeout = aiohttp.ClientTimeout(total=10)  # 10 second timeout
+                async with aiohttp.ClientSession(timeout=timeout) as session:
+                    async with session.post(url, json=payload, ssl=ssl_context) as response:
+                        response_status = response.status
+                        response_headers = dict(response.headers)
+                        
+                        try:
+                            response_data = await response.json()
+                        except:
+                            response_text = await response.text()
+                            response_data = {"raw_text": response_text}
+                        
+                        self.logger.log_info(f"📡 HTTP RESPONSE RECEIVED", {
                             "tool_name": tool_name,
                             "session_id": session_id,
                             "status_code": response_status,
-                            "response": response_data
+                            "headers": response_headers,
+                            "response_data": response_data,
+                            "attempt": attempt + 1
                         })
-                        return {"result": f"HTTP Error {response_status}: {response_data}"}
                         
-        except aiohttp.ClientError as e:
-            self.logger.log_error(f"❌ HTTP CLIENT ERROR", e, {
-                "tool_name": tool_name,
-                "session_id": session_id,
-                "url": url,
-                "payload": payload
-            })
-            return {"result": f"Ошибка соединения: {str(e)}"}
-        except Exception as e:
-            self.logger.log_error(f"❌ UNEXPECTED API ERROR", e, {
-                "tool_name": tool_name,
-                "session_id": session_id,
-                "url": url,
-                "payload": payload
-            })
-            return {"result": f"Неожиданная ошибка: {str(e)}"}
+                        if response_status == 200:
+                            self.logger.log_info(f"✅ API CALL SUCCESS", {
+                                "tool_name": tool_name,
+                                "session_id": session_id,
+                                "result": response_data,
+                                "attempt": attempt + 1
+                            })
+                            return response_data
+                        elif response_status == 503 and attempt < max_retries:
+                            # Retry on 503 errors (service unavailable)
+                            wait_time = (attempt + 1) * 2  # 2, 4 seconds
+                            self.logger.log_info(f"⏳ RETRYING after {response_status} error", {
+                                "tool_name": tool_name,
+                                "session_id": session_id,
+                                "attempt": attempt + 1,
+                                "max_retries": max_retries,
+                                "wait_time": wait_time
+                            })
+                            await asyncio.sleep(wait_time)
+                            continue
+                        else:
+                            self.logger.log_error(f"❌ API CALL HTTP ERROR", None, {
+                                "tool_name": tool_name,
+                                "session_id": session_id,
+                                "status_code": response_status,
+                                "response": response_data,
+                                "attempt": attempt + 1
+                            })
+                            # Return fallback response for final attempt
+                            if tool_name == "rag_find_products":
+                                return {"result": "Извините, сейчас возникли технические проблемы с поиском товаров. Попробуйте повторить запрос позднее."}
+                            else:
+                                return {"result": f"HTTP Error {response_status}: {response_data}"}
+                            
+            except asyncio.TimeoutError:
+                if attempt < max_retries:
+                    wait_time = (attempt + 1) * 2
+                    self.logger.log_info(f"⏳ RETRYING after timeout", {
+                        "tool_name": tool_name,
+                        "session_id": session_id,
+                        "attempt": attempt + 1,
+                        "wait_time": wait_time
+                    })
+                    await asyncio.sleep(wait_time)
+                    continue
+                else:
+                    self.logger.log_error(f"❌ HTTP TIMEOUT ERROR", None, {
+                        "tool_name": tool_name,
+                        "session_id": session_id,
+                        "url": url,
+                        "final_attempt": True
+                    })
+                    return {"result": "Время ожидания ответа истекло. Попробуйте позднее."}
+            except aiohttp.ClientError as e:
+                if attempt < max_retries:
+                    wait_time = (attempt + 1) * 2
+                    self.logger.log_info(f"⏳ RETRYING after client error", {
+                        "tool_name": tool_name,
+                        "session_id": session_id,
+                        "attempt": attempt + 1,
+                        "error": str(e),
+                        "wait_time": wait_time
+                    })
+                    await asyncio.sleep(wait_time)
+                    continue
+                else:
+                    self.logger.log_error(f"❌ HTTP CLIENT ERROR", e, {
+                        "tool_name": tool_name,
+                        "session_id": session_id,
+                        "url": url,
+                        "payload": payload,
+                        "final_attempt": True
+                    })
+                    return {"result": f"Ошибка соединения: {str(e)}"}
+            except Exception as e:
+                self.logger.log_error(f"❌ UNEXPECTED API ERROR", e, {
+                    "tool_name": tool_name,
+                    "session_id": session_id,
+                    "url": url,
+                    "payload": payload,
+                    "attempt": attempt + 1
+                })
+                return {"result": f"Неожиданная ошибка: {str(e)}"}
+        
+        # This should never be reached due to the logic above, but just in case
+        return {"result": "Максимальное количество попыток исчерпано"}
     
     async def _set_current_location(self, parameters: Dict[str, Any], session_id: str) -> Dict[str, Any]:
         """Set current location for delivery"""

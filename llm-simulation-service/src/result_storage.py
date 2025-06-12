@@ -134,14 +134,22 @@ class ResultStorage:
                 'score_3': int((scores == 3).sum()) if len(scores) > 0 else 0
             }
             
-            # Turn statistics
-            turns = df['total_turns'].dropna()
-            turn_stats = {
-                'mean': float(turns.mean()) if len(turns) > 0 else 0,
-                'median': float(turns.median()) if len(turns) > 0 else 0,
-                'min': int(turns.min()) if len(turns) > 0 else 0,
-                'max': int(turns.max()) if len(turns) > 0 else 0
-            }
+            # Turn statistics (handle missing total_turns column)
+            if 'total_turns' in df.columns:
+                turns = df['total_turns'].dropna()
+                turn_stats = {
+                    'mean': float(turns.mean()) if len(turns) > 0 else 0,
+                    'median': float(turns.median()) if len(turns) > 0 else 0,
+                    'min': int(turns.min()) if len(turns) > 0 else 0,
+                    'max': int(turns.max()) if len(turns) > 0 else 0
+                }
+            else:
+                turn_stats = {
+                    'mean': 0,
+                    'median': 0,
+                    'min': 0,
+                    'max': 0
+                }
             
             # Duration statistics
             durations = df['duration_seconds'].dropna()
@@ -153,12 +161,14 @@ class ResultStorage:
                 'total': float(durations.sum()) if len(durations) > 0 else 0
             }
             
-            # Scenario performance
-            scenario_agg = df.groupby('scenario').agg({
-                'score': ['mean', 'count'],
-                'total_turns': 'mean',
-                'duration_seconds': 'mean'
-            }).round(2)
+            # Scenario performance (handle missing columns gracefully)
+            agg_dict = {'score': ['mean', 'count']}
+            if 'total_turns' in df.columns:
+                agg_dict['total_turns'] = 'mean'
+            if 'duration_seconds' in df.columns:
+                agg_dict['duration_seconds'] = 'mean'
+                
+            scenario_agg = df.groupby('scenario').agg(agg_dict).round(2)
             
             # Flatten MultiIndex columns to avoid tuple keys in JSON
             scenario_agg.columns = ['_'.join(col).strip() if isinstance(col, tuple) else str(col) for col in scenario_agg.columns]

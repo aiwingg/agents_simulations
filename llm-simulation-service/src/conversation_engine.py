@@ -184,7 +184,15 @@ class ConversationEngine:
             while turn_number < max_turns:
                 # Check timeout
                 if time.time() - start_time > timeout_sec:
-                    self.logger.log_error(f"Conversation timeout after {timeout_sec} seconds", extra_data={'session_id': session_id})
+                    timeout_context = {
+                        'session_id': session_id,
+                        'timeout_sec': timeout_sec,
+                        'actual_duration': time.time() - start_time,
+                        'turn_number': turn_number,
+                        'max_turns': max_turns,
+                        'scenario_name': scenario.get('name', 'unknown')
+                    }
+                    self.logger.log_error(f"Conversation timeout after {timeout_sec} seconds (actual: {time.time() - start_time:.1f}s)", extra_data=timeout_context)
                     break
                 
                 turn_number += 1
@@ -221,6 +229,14 @@ class ConversationEngine:
                 
                 # Check if we've reached max turns
                 if turn_number >= max_turns:
+                    turn_limit_context = {
+                        'session_id': session_id,
+                        'max_turns': max_turns,
+                        'turn_number': turn_number,
+                        'duration': time.time() - start_time,
+                        'scenario_name': scenario.get('name', 'unknown')
+                    }
+                    self.logger.log_info(f"Conversation reached max turns limit ({max_turns})", extra_data=turn_limit_context)
                     break
                 
                 # Client turn
@@ -279,15 +295,30 @@ class ConversationEngine:
             }
             
         except Exception as e:
-            self.logger.log_error(f"Conversation failed", exception=e, extra_data={'session_id': session_id})
+            # Enhanced error logging with more context
+            error_context = {
+                'session_id': session_id,
+                'scenario_name': scenario_name,
+                'turn_number': turn_number if 'turn_number' in locals() else 0,
+                'duration_so_far': time.time() - start_time,
+                'max_turns': max_turns,
+                'timeout_sec': timeout_sec,
+                'error_type': type(e).__name__,
+                'agent_messages_count': len(agent_messages) if 'agent_messages' in locals() else 0,
+                'client_messages_count': len(client_messages) if 'client_messages' in locals() else 0
+            }
+            
+            self.logger.log_error(f"Conversation failed: {str(e)}", exception=e, extra_data=error_context)
             
             return {
                 'session_id': session_id,
                 'scenario': scenario_name,
                 'status': 'failed',
                 'error': str(e),
+                'error_type': type(e).__name__,
                 'total_turns': turn_number if 'turn_number' in locals() else 0,
-                'duration_seconds': time.time() - start_time
+                'duration_seconds': time.time() - start_time,
+                'error_context': error_context
             }
     
     def _get_agent_tools_schema(self) -> List[Dict[str, Any]]:
@@ -583,7 +614,16 @@ class ConversationEngine:
             while turn_number < max_turns and not conversation_ended:
                 # Check timeout
                 if time.time() - start_time > timeout_sec:
-                    self.logger.log_error(f"Conversation timeout after {timeout_sec} seconds", extra_data={'session_id': session_id})
+                    timeout_context = {
+                        'session_id': session_id,
+                        'timeout_sec': timeout_sec,
+                        'actual_duration': time.time() - start_time,
+                        'turn_number': turn_number,
+                        'max_turns': max_turns,
+                        'scenario_name': scenario.get('name', 'unknown'),
+                        'conversation_ended': conversation_ended
+                    }
+                    self.logger.log_error(f"Conversation with tools timeout after {timeout_sec} seconds (actual: {time.time() - start_time:.1f}s)", extra_data=timeout_context)
                     break
                 
                 turn_number += 1
@@ -614,7 +654,7 @@ class ConversationEngine:
                     # Add assistant message with tool calls
                     agent_messages.append({
                         "role": "assistant",
-                        "content": agent_response.content,
+                        "content": agent_response.content or "",
                         "tool_calls": tool_calls
                     })
                     
@@ -633,6 +673,9 @@ class ConversationEngine:
                     )
                     
                     agent_content = agent_final_response.content if hasattr(agent_final_response, 'content') else str(agent_final_response)
+                    # Ensure agent_content is never null or empty
+                    if not agent_content:
+                        agent_content = ""
                     
                     # Log agent turn with tool calls and results
                     self.logger.log_conversation_turn(
@@ -655,6 +698,9 @@ class ConversationEngine:
                     })
                 else:
                     agent_content = agent_response.content if hasattr(agent_response, 'content') else str(agent_response)
+                    # Ensure agent_content is never null or empty
+                    if not agent_content:
+                        agent_content = ""
                     
                     # Log agent turn without tool calls
                     self.logger.log_conversation_turn(
@@ -735,6 +781,9 @@ class ConversationEngine:
                     break
                 
                 client_content = client_response.content if hasattr(client_response, 'content') else str(client_response)
+                # Ensure client_content is never null or empty
+                if not client_content:
+                    client_content = ""
                 
                 # Log client turn (only if no tool calls were made)
                 if not (hasattr(client_response, 'tool_calls') and client_response.tool_calls):
@@ -782,15 +831,31 @@ class ConversationEngine:
             }
             
         except Exception as e:
-            self.logger.log_error(f"Conversation with tools failed", exception=e, extra_data={'session_id': session_id})
+            # Enhanced error logging with more context
+            error_context = {
+                'session_id': session_id,
+                'scenario_name': scenario_name,
+                'turn_number': turn_number if 'turn_number' in locals() else 0,
+                'duration_so_far': time.time() - start_time,
+                'max_turns': max_turns,
+                'timeout_sec': timeout_sec,
+                'error_type': type(e).__name__,
+                'conversation_ended': conversation_ended if 'conversation_ended' in locals() else False,
+                'agent_messages_count': len(agent_messages) if 'agent_messages' in locals() else 0,
+                'client_messages_count': len(client_messages) if 'client_messages' in locals() else 0
+            }
+            
+            self.logger.log_error(f"Conversation with tools failed: {str(e)}", exception=e, extra_data=error_context)
             
             return {
                 'session_id': session_id,
                 'scenario': scenario_name,
                 'status': 'failed',
                 'error': str(e),
+                'error_type': type(e).__name__,
                 'total_turns': turn_number if 'turn_number' in locals() else 0,
                 'duration_seconds': time.time() - start_time,
-                'tools_used': True
+                'tools_used': True,
+                'error_context': error_context
             }
 

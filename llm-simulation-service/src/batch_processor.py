@@ -298,6 +298,11 @@ class BatchProcessor:
                 
                 # Run conversation (with or without tools based on batch setting)
                 job = self.active_jobs[batch_id]
+                
+                # Safety check for conversation engine
+                if self.conversation_engine is None:
+                    raise ValueError("ConversationEngine is not initialized")
+                
                 if job.use_tools:
                     conversation_result = await self.conversation_engine.run_conversation_with_tools(scenario)
                 else:
@@ -337,7 +342,10 @@ class BatchProcessor:
                 
                 # Update progress
                 if progress_callback:
-                    await progress_callback(batch_id, scenario_index + 1)
+                    if asyncio.iscoroutinefunction(progress_callback):
+                        await progress_callback(batch_id, scenario_index + 1)
+                    else:
+                        progress_callback(batch_id, scenario_index + 1)
                 
                 self.logger.log_info(f"Completed scenario {scenario_index}: {scenario_name}", extra_data={
                     'batch_id': batch_id,
@@ -348,7 +356,17 @@ class BatchProcessor:
                 return combined_result
                 
             except Exception as e:
-                self.logger.log_error(f"Failed to process scenario {scenario_index}", exception=e, extra_data={'batch_id': batch_id})
+                # Enhanced error logging with debug information
+                error_context = {
+                    'batch_id': batch_id,
+                    'scenario_index': scenario_index,
+                    'error_type': type(e).__name__,
+                    'error_message': str(e),
+                    'scenario_name': scenario.get('name', 'unknown'),
+                    'conversation_engine_initialized': self.conversation_engine is not None,
+                    'evaluator_initialized': self.evaluator is not None
+                }
+                self.logger.log_error(f"Failed to process scenario {scenario_index}", exception=e, extra_data=error_context)
                 raise e
     
     async def _update_progress(self, batch_id: str, completed_count: int):
