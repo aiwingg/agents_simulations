@@ -42,6 +42,23 @@ class ConversationEngine:
             variables = variables.copy()
             variables['session_id'] = session_id
             
+            # Set default values for missing variables
+            defaults = {
+                'CURRENT_DATE': '2024-01-15',
+                'current_date': '2024-01-15',
+                'DELIVERY_DAY': 'завтра',
+                'delivery_days': 'понедельник, среда, пятница',
+                'PURCHASE_HISTORY': 'История покупок отсутствует',
+                'purchase_history': 'История покупок отсутствует',
+                'name': variables.get('CLIENT_NAME', 'Клиент'),
+                'locations': variables.get('LOCATION', 'Адрес не указан')
+            }
+            
+            # Add defaults for missing variables
+            for key, default_value in defaults.items():
+                if key not in variables:
+                    variables[key] = default_value
+            
             # Convert Jinja2-style {{variable}} to Python format {variable}
             import re
             formatted_template = re.sub(r'\{\{(\w+)\}\}', r'{\1}', template)
@@ -49,7 +66,17 @@ class ConversationEngine:
             return formatted_template.format(**variables)
         except KeyError as e:
             self.logger.log_error(f"Missing variable in prompt template: {e}")
-            return template
+            # Try to replace remaining variables with placeholders
+            import re
+            remaining_vars = re.findall(r'\{(\w+)\}', template)
+            for var in remaining_vars:
+                if var not in variables:
+                    variables[var] = f"[{var}_NOT_SET]"
+            try:
+                formatted_template = re.sub(r'\{\{(\w+)\}\}', r'{\1}', template)
+                return formatted_template.format(**variables)
+            except:
+                return template
     
     async def _enrich_variables_with_client_data(self, variables: Dict[str, Any]) -> Tuple[Dict[str, Any], Optional[str]]:
         """
