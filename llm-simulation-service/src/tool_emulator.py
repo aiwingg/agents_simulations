@@ -5,6 +5,10 @@ import json
 import aiohttp
 from typing import Dict, Any, List, Optional
 from src.logging_utils import get_logger
+import ssl
+import certifi
+
+ssl_context = ssl.create_default_context(cafile=certifi.where())
 
 class ToolEmulator:
     """Emulates external tools/APIs for conversation simulation"""
@@ -69,7 +73,7 @@ class ToolEmulator:
         
         try:
             async with aiohttp.ClientSession() as session:
-                async with session.post(url, json=payload) as response:
+                async with session.post(url, json=payload, ssl=ssl_context) as response:
                     response_status = response.status
                     response_headers = dict(response.headers)
                     

@@ -4,9 +4,13 @@ Webhook integration for session initialization and client data retrieval
 import aiohttp
 import uuid
 import json
+import ssl
+import certifi
 from typing import Optional, Dict, Any
 from src.config import Config
 from src.logging_utils import get_logger
+
+ssl_context = ssl.create_default_context(cafile=certifi.where())
 
 class WebhookManager:
     """Manages webhook interactions for session initialization and client data retrieval"""
@@ -52,7 +56,8 @@ class WebhookManager:
                 async with session.post(
                     self.rag_webhook_url, 
                     json=payload,
-                    timeout=30
+                    timeout=30,
+                    ssl=ssl_context
                 ) as response:
                     if response.status == 200:
                         data = await response.json()
