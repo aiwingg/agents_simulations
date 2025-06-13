@@ -68,7 +68,13 @@ def launch_batch():
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
             try:
-                result = loop.run_until_complete(processor.run_batch(batch_id))
+                # Define progress callback to update batch status
+                async def progress_callback(batch_id: str, completed_count: int):
+                    # Progress is handled within BatchProcessor._update_progress
+                    # This callback can be used for additional logging if needed
+                    logger.log_info(f"Batch {batch_id} progress: {completed_count} scenarios completed")
+                
+                result = loop.run_until_complete(processor.run_batch(batch_id, progress_callback))
                 
                 # Save results when batch completes
                 if result.get('status') == 'completed':

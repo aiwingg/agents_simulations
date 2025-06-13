@@ -198,6 +198,9 @@ class BatchProcessor:
         job.status = BatchStatus.RUNNING
         job.started_at = datetime.now()
         
+        # Create progress tracking lock for thread safety
+        progress_lock = asyncio.Lock()
+        
         # Save updated state to persistent storage
         self._save_batch_to_storage(job)
         
@@ -215,7 +218,8 @@ class BatchProcessor:
                     scenario=scenario,
                     scenario_index=i,
                     batch_id=batch_id,
-                    progress_callback=progress_callback
+                    progress_callback=progress_callback,
+                    progress_lock=progress_lock
                 )
                 tasks.append(task)
             
@@ -287,7 +291,8 @@ class BatchProcessor:
             raise e
     
     async def _process_single_scenario(self, scenario: Dict[str, Any], scenario_index: int, 
-                                     batch_id: str, progress_callback: Optional[Callable] = None) -> Dict[str, Any]:
+                                     batch_id: str, progress_callback: Optional[Callable] = None,
+                                     progress_lock: asyncio.Lock = None) -> Dict[str, Any]:
         """Process a single scenario with conversation and evaluation"""
         
         async with self.semaphore:  # Limit concurrency
@@ -347,6 +352,15 @@ class BatchProcessor:
                     else:
                         progress_callback(batch_id, scenario_index + 1)
                 
+                # Update progress in batch job and save to storage (thread-safe)
+                if progress_lock:
+                    async with progress_lock:
+                        await self._update_progress(batch_id)  # Increment by 1
+                        self._save_batch_to_storage(self.active_jobs[batch_id])
+                else:
+                    await self._update_progress(batch_id)  # Increment by 1
+                    self._save_batch_to_storage(self.active_jobs[batch_id])
+                
                 self.logger.log_info(f"Completed scenario {scenario_index}: {scenario_name}", extra_data={
                     'batch_id': batch_id,
                     'score': combined_result.get('score'),
@@ -369,12 +383,25 @@ class BatchProcessor:
                 self.logger.log_error(f"Failed to process scenario {scenario_index}", exception=e, extra_data=error_context)
                 raise e
     
-    async def _update_progress(self, batch_id: str, completed_count: int):
+    async def _update_progress(self, batch_id: str, completed_count: int = None):
         """Update batch job progress"""
         if batch_id in self.active_jobs:
             job = self.active_jobs[batch_id]
-            job.completed_scenarios = completed_count
-            job.progress_percentage = (completed_count / job.total_scenarios) * 100.0
+            old_progress = job.progress_percentage
+            if completed_count is not None:
+                job.completed_scenarios = completed_count
+            else:
+                # If no count provided, increment by 1
+                job.completed_scenarios += 1
+            job.progress_percentage = (job.completed_scenarios / job.total_scenarios) * 100.0
+            
+            # Log progress update for debugging
+            self.logger.log_info(f"Progress updated for batch {batch_id}", extra_data={
+                'old_progress': old_progress,
+                'new_progress': job.progress_percentage,
+                'completed_scenarios': job.completed_scenarios,
+                'total_scenarios': job.total_scenarios
+            })
     
     def cancel_batch(self, batch_id: str) -> bool:
         """Cancel a running batch job"""

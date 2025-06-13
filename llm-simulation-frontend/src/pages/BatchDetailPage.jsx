@@ -226,6 +226,12 @@ const BatchDetailPage = () => {
                 value={batchStatus.progress || 0}
                 sx={{ mt: 1 }}
               />
+              <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
+                Last updated: {new Date().toLocaleTimeString()}
+              </Typography>
+              <Typography variant="caption" color="text.secondary">
+                Raw progress: {batchStatus.progress}
+              </Typography>
             </CardContent>
           </Card>
         </Grid>
