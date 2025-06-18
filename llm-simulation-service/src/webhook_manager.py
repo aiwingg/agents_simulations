@@ -120,13 +120,7 @@ class WebhookManager:
         }
 
     async def initialize_session(self) -> str:
-        """Initialize a new session via webhook or generate UUID"""
-        
-        if not self.webhook_url:
-            # If no webhook URL configured, generate a UUID
-            session_id = str(uuid.uuid4())
-            self.logger.log_info(f"Generated session ID (no webhook): {session_id}")
-            return session_id
+        """Initialize a new session via webhook"""
         
         try:
             async with aiohttp.ClientSession() as session:

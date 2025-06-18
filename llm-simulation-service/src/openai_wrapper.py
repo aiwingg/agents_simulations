@@ -4,6 +4,7 @@ OpenAI API wrapper with retry logic and rate limiting
 import asyncio
 import json
 import time
+import uuid
 from typing import Dict, List, Optional, Any, Tuple
 from openai import AsyncOpenAI
 from asyncio_throttle import Throttler
@@ -37,7 +38,24 @@ class OpenAIWrapper:
                                      tools: Optional[List[Dict[str, Any]]] = None) -> Tuple[Any, Dict[str, int]]:
         """Make OpenAI API request with retry logic"""
         
+        # Generate unique request ID for tracking
+        request_id = str(uuid.uuid4())
+        
+        # Log the request
+        self.logger.log_openai_request(
+            session_id=session_id,
+            request_id=request_id,
+            model=self.model,
+            messages=messages,
+            temperature=temperature,
+            seed=seed,
+            tools=tools,
+            response_format=response_format
+        )
+        
         for attempt in range(self.max_retries):
+            request_start_time = time.time()
+            
             try:
                 async with self.throttler:
                     # Prepare request parameters
@@ -60,6 +78,9 @@ class OpenAIWrapper:
                     # Make the API call
                     response = await self.client.chat.completions.create(**request_params)
                     
+                    # Calculate request duration
+                    duration_ms = (time.time() - request_start_time) * 1000
+                    
                     # Extract response data
                     message = response.choices[0].message
                     
@@ -77,6 +98,17 @@ class OpenAIWrapper:
                     # Calculate cost estimate
                     cost_estimate = self._calculate_cost(usage)
                     
+                    # Log successful response
+                    self.logger.log_openai_response(
+                        session_id=session_id,
+                        request_id=request_id,
+                        response_content=message,
+                        usage=usage,
+                        cost_estimate=cost_estimate,
+                        duration_ms=duration_ms,
+                        attempt=attempt + 1
+                    )
+                    
                     # Log token usage
                     self.logger.log_token_usage(
                         session_id=session_id,
@@ -90,6 +122,9 @@ class OpenAIWrapper:
                     return content, usage
                     
             except Exception as e:
+                # Calculate request duration for failed request
+                duration_ms = (time.time() - request_start_time) * 1000
+                
                 error_context = {
                     'session_id': session_id, 
                     'model': self.model,
@@ -98,23 +133,53 @@ class OpenAIWrapper:
                     'error_type': type(e).__name__,
                     'messages_count': len(messages),
                     'has_tools': bool(tools),
-                    'temperature': temperature
+                    'temperature': temperature,
+                    'request_id': request_id,
+                    'duration_ms': duration_ms
                 }
                 
+                # Log failed response
+                self.logger.log_openai_response(
+                    session_id=session_id,
+                    request_id=request_id,
+                    response_content=None,
+                    usage={'prompt_tokens': 0, 'completion_tokens': 0, 'total_tokens': 0},
+                    cost_estimate=0.0,
+                    duration_ms=duration_ms,
+                    attempt=attempt + 1,
+                    error=str(e)
+                )
+                
+                # Check for specific error types and handle accordingly
+                error_message = str(e).lower()
+                
+                # Handle geographic restrictions (403 errors)
+                if 'unsupported_country_region_territory' in error_message or '403' in error_message:
+                    self.logger.log_error(f"OpenAI geographic restriction detected (attempt {attempt + 1}/{self.max_retries}): {str(e)}", exception=e, extra_data=error_context)
+                    
+                    raise Exception(f"OpenAI API blocked due to geographic restrictions after {self.max_retries} attempts")
+                
                 # Log different types of OpenAI errors differently
-                if 'rate_limit' in str(e).lower():
+                elif 'rate_limit' in error_message:
                     self.logger.log_error(f"OpenAI rate limit exceeded (attempt {attempt + 1}/{self.max_retries})", exception=e, extra_data=error_context)
-                elif 'timeout' in str(e).lower():
+                    # Longer wait for rate limits
+                    if attempt < self.max_retries - 1:
+                        wait_time = (2 ** (attempt + 2)) + random.uniform(2, 5)  # 6-9s, 10-13s, 18-21s
+                        await asyncio.sleep(wait_time)
+                        continue
+                elif 'timeout' in error_message:
                     self.logger.log_error(f"OpenAI request timeout (attempt {attempt + 1}/{self.max_retries})", exception=e, extra_data=error_context)
-                elif 'quota' in str(e).lower():
+                elif 'quota' in error_message:
                     self.logger.log_error(f"OpenAI quota exceeded (attempt {attempt + 1}/{self.max_retries})", exception=e, extra_data=error_context)
+                elif 'connection' in error_message or 'network' in error_message:
+                    self.logger.log_error(f"OpenAI connection error (attempt {attempt + 1}/{self.max_retries})", exception=e, extra_data=error_context)
                 else:
                     self.logger.log_error(f"OpenAI API request failed (attempt {attempt + 1}/{self.max_retries}): {str(e)}", exception=e, extra_data=error_context)
                 
                 if attempt == self.max_retries - 1:
                     raise e
                 
-                # Exponential backoff with jitter
+                # Standard exponential backoff with jitter for other errors
                 wait_time = (2 ** attempt) + random.uniform(0, 1)
                 await asyncio.sleep(wait_time)
         

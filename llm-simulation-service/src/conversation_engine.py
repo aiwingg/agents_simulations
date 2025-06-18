@@ -175,7 +175,7 @@ class ConversationEngine:
             client_messages = [{"role": "system", "content": client_system_prompt}]
             
             # Start conversation with client greeting
-            client_messages.append({"role": "user", "content": "Добрый день!"})
+            # client_messages.append({"role": "user", "content": "Добрый день!"})
             
             conversation_history = []
             turn_number = 0
@@ -225,7 +225,7 @@ class ConversationEngine:
                     break
                 
                 # Add agent response to client's context
-                client_messages.append({"role": "assistant", "content": agent_response})
+                client_messages.append({"role": "user", "content": agent_response})
                 
                 # Check if we've reached max turns
                 if turn_number >= max_turns:
@@ -266,7 +266,7 @@ class ConversationEngine:
                 agent_messages.append({"role": "user", "content": client_response})
                 
                 # Add client response to client's context for next turn
-                client_messages.append({"role": "user", "content": client_response})
+                client_messages.append({"role": "assistant", "content": client_response})
                 
                 # Check if client wants to end conversation
                 if any(phrase in client_response.lower() for phrase in ["до свидания", "спасибо", "всё", "хватит", "конец"]):
@@ -568,14 +568,10 @@ class ConversationEngine:
         
         # Enrich variables with client data if client_id is provided
         variables, webhook_session_id = await self._enrich_variables_with_client_data(variables)
-        
-        # Use webhook session_id if available, otherwise initialize a new session
-        if webhook_session_id:
-            session_id = webhook_session_id
-            self.logger.log_info(f"Using session_id from webhook: {session_id}")
-        else:
-            session_id = await self.webhook_manager.initialize_session()
-            self.logger.log_info(f"Using generated session_id: {session_id}")
+
+        session_id = webhook_session_id
+        self.logger.log_info(f"Using session_id from webhook: {session_id}")
+
         
         self.logger.log_info(f"Starting conversation simulation with tools", extra_data={
             'session_id': session_id,
@@ -604,7 +600,9 @@ class ConversationEngine:
             client_tools = self._get_client_tools_schema()
             
             # Start conversation with client greeting
-            client_messages.append({"role": "user", "content": "Добрый день!"})
+            # client_messages.append({"role": "assistant", "content": "Добрый день!"})
+            # agent_messages.append({"role": "user", "content": "Добрый день!"})
+
             
             conversation_history = []
             turn_number = 0
@@ -718,7 +716,7 @@ class ConversationEngine:
                     })
                 
                 # Add agent response to client's context
-                client_messages.append({"role": "assistant", "content": agent_content})
+                client_messages.append({"role": "user", "content": agent_content})
                 
                 # Check if we've reached max turns
                 if turn_number >= max_turns:
@@ -806,7 +804,7 @@ class ConversationEngine:
                 agent_messages.append({"role": "user", "content": client_content})
                 
                 # Add client response to client's context for next turn
-                client_messages.append({"role": "user", "content": client_content})
+                client_messages.append({"role": "assistant", "content": client_content})
             
             end_time = time.time()
             duration = end_time - start_time
@@ -845,7 +843,31 @@ class ConversationEngine:
                 'client_messages_count': len(client_messages) if 'client_messages' in locals() else 0
             }
             
-            self.logger.log_error(f"Conversation with tools failed: {str(e)}", exception=e, extra_data=error_context)
+            # Check if this is a geographic restriction or persistent OpenAI API failure
+            error_message = str(e).lower()
+            is_api_blocked = ('geographic restriction' in error_message or 
+                            'unsupported_country_region_territory' in error_message or
+                            'blocked due to geographic' in error_message)
+            
+            if is_api_blocked:
+                self.logger.log_error(f"OpenAI API blocked - attempting graceful degradation: {str(e)}", exception=e, extra_data=error_context)
+                
+                # Return a graceful failure with some useful information
+                return {
+                    'session_id': session_id,
+                    'scenario': scenario_name,
+                    'status': 'failed_api_blocked',
+                    'error': 'OpenAI API blocked due to geographic restrictions',
+                    'error_type': 'APIBlockedError',
+                    'total_turns': error_context.get('turn_number', 0),
+                    'duration_seconds': error_context.get('duration_so_far', 0),
+                    'tools_used': True,
+                    'conversation_history': conversation_history if 'conversation_history' in locals() else [],
+                    'graceful_degradation': True,
+                    'partial_completion': error_context.get('turn_number', 0) > 0
+                }
+            else:
+                self.logger.log_error(f"Conversation with tools failed: {str(e)}", exception=e, extra_data=error_context)
             
             return {
                 'session_id': session_id,

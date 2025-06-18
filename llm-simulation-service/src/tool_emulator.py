@@ -59,7 +59,7 @@ class ToolEmulator:
             })
             return {"result": "Ошибка при выполнении запроса"}
     
-    async def _make_api_request(self, endpoint: str, payload: Dict[str, Any], session_id: str, tool_name: str, max_retries: int = 2) -> Dict[str, Any]:
+    async def _make_api_request(self, endpoint: str, payload: Dict[str, Any], session_id: str, tool_name: str, parameters: Dict[str, Any], max_retries: int = 3) -> Dict[str, Any]:
         """Make HTTP request to external API with detailed logging and retry logic"""
         
         url = f"{self.base_url}{endpoint}"
@@ -72,9 +72,14 @@ class ToolEmulator:
             "payload": payload
         })
         
+        # Progressive timeout increases: 15s, 20s, 25s, 30s
+        timeouts = [15, 20, 25, 30]
+        
         for attempt in range(max_retries + 1):
             try:
-                timeout = aiohttp.ClientTimeout(total=10)  # 10 second timeout
+                current_timeout = timeouts[min(attempt, len(timeouts) - 1)]
+                timeout = aiohttp.ClientTimeout(total=current_timeout)
+                
                 async with aiohttp.ClientSession(timeout=timeout) as session:
                     async with session.post(url, json=payload, ssl=ssl_context) as response:
                         response_status = response.status
@@ -92,7 +97,8 @@ class ToolEmulator:
                             "status_code": response_status,
                             "headers": response_headers,
                             "response_data": response_data,
-                            "attempt": attempt + 1
+                            "attempt": attempt + 1,
+                            "timeout_used": current_timeout
                         })
                         
                         if response_status == 200:
@@ -103,9 +109,9 @@ class ToolEmulator:
                                 "attempt": attempt + 1
                             })
                             return response_data
-                        elif response_status == 503 and attempt < max_retries:
-                            # Retry on 503 errors (service unavailable)
-                            wait_time = (attempt + 1) * 2  # 2, 4 seconds
+                        elif response_status in [503, 502, 504] and attempt < max_retries:
+                            # Retry on service unavailable errors
+                            wait_time = (attempt + 1) * 3  # 3, 6, 9 seconds
                             self.logger.log_info(f"⏳ RETRYING after {response_status} error", {
                                 "tool_name": tool_name,
                                 "session_id": session_id,
@@ -123,19 +129,17 @@ class ToolEmulator:
                                 "response": response_data,
                                 "attempt": attempt + 1
                             })
-                            # Return fallback response for final attempt
-                            if tool_name == "rag_find_products":
-                                return {"result": "Извините, сейчас возникли технические проблемы с поиском товаров. Попробуйте повторить запрос позднее."}
-                            else:
-                                return {"result": f"HTTP Error {response_status}: {response_data}"}
+                            # Return enhanced fallback response
+                            return self._get_fallback_response(tool_name, parameters, response_status, response_data)
                             
             except asyncio.TimeoutError:
                 if attempt < max_retries:
-                    wait_time = (attempt + 1) * 2
+                    wait_time = (attempt + 1) * 3
                     self.logger.log_info(f"⏳ RETRYING after timeout", {
                         "tool_name": tool_name,
                         "session_id": session_id,
                         "attempt": attempt + 1,
+                        "timeout_used": current_timeout,
                         "wait_time": wait_time
                     })
                     await asyncio.sleep(wait_time)
@@ -145,12 +149,13 @@ class ToolEmulator:
                         "tool_name": tool_name,
                         "session_id": session_id,
                         "url": url,
-                        "final_attempt": True
+                        "final_attempt": True,
+                        "total_timeout": current_timeout
                     })
-                    return {"result": "Время ожидания ответа истекло. Попробуйте позднее."}
+                    return self._get_fallback_response(tool_name, parameters, "timeout", None)
             except aiohttp.ClientError as e:
                 if attempt < max_retries:
-                    wait_time = (attempt + 1) * 2
+                    wait_time = (attempt + 1) * 3
                     self.logger.log_info(f"⏳ RETRYING after client error", {
                         "tool_name": tool_name,
                         "session_id": session_id,
@@ -168,7 +173,7 @@ class ToolEmulator:
                         "payload": payload,
                         "final_attempt": True
                     })
-                    return {"result": f"Ошибка соединения: {str(e)}"}
+                    return self._get_fallback_response(tool_name, parameters, "client_error", str(e))
             except Exception as e:
                 self.logger.log_error(f"❌ UNEXPECTED API ERROR", e, {
                     "tool_name": tool_name,
@@ -177,10 +182,50 @@ class ToolEmulator:
                     "payload": payload,
                     "attempt": attempt + 1
                 })
-                return {"result": f"Неожиданная ошибка: {str(e)}"}
+                return self._get_fallback_response(tool_name, parameters, "unexpected_error", str(e))
         
         # This should never be reached due to the logic above, but just in case
-        return {"result": "Максимальное количество попыток исчерпано"}
+        return self._get_fallback_response(tool_name, parameters, "max_retries_exceeded", None)
+    
+    def _get_fallback_response(self, tool_name: str, parameters: Dict[str, Any], error_type: str, error_details: Any) -> Dict[str, Any]:
+        """Generate appropriate fallback responses when external APIs fail"""
+        
+        if tool_name == "rag_find_products":
+            # Enhanced fallback for product search - try to provide helpful responses
+            query = parameters.get("message", "").lower()
+            return {
+                "result": f"Произошла ошибка поиска товаров. Ошибка: {error_type}, {error_details}"
+            }
+    
+        elif tool_name == "add_to_cart":
+            return {
+                "result": f"Произошла ошибка при добавлении товара в корзину. Ошибка: {error_type}, {error_details}"
+            }
+        
+        elif tool_name == "set_current_location":
+            return {
+                "result": f"Произошла ошибка при установке адреса доставки. Ошибка: {error_type}, {error_details}"
+            }
+        
+        elif tool_name == "get_cart":
+            return {
+                "result": f"Произошла ошибка при получении корзины. Ошибка: {error_type}, {error_details}"
+            }
+        
+        elif tool_name == "change_delivery_date":
+            return {
+                "result": f"Произошла ошибка при изменении даты доставки. Ошибка: {error_type}, {error_details}"
+            }
+        
+        elif tool_name == "remove_from_cart":
+            return {
+                "result": f"Произошла ошибка при удалении товара из корзины. Ошибка: {error_type}, {error_details}"
+            }
+        
+        else:
+            return {
+                "result": f"Сервис временно недоступен. Ошибка: {error_type}, {error_details}"
+            }
     
     async def _set_current_location(self, parameters: Dict[str, Any], session_id: str) -> Dict[str, Any]:
         """Set current location for delivery"""
@@ -194,7 +239,7 @@ class ToolEmulator:
             "args": parameters
         }
         
-        result = await self._make_api_request("/set_current_location", payload, session_id, "set_current_location")
+        result = await self._make_api_request("/set_current_location", payload, session_id, "set_current_location", parameters)
         
         self.logger.log_info(f"🏠 SET_CURRENT_LOCATION RESULT", {
             "session_id": session_id,
@@ -216,7 +261,7 @@ class ToolEmulator:
             "args": parameters
         }
         
-        result = await self._make_api_request("/set_current_location", payload, session_id, "add_to_cart")
+        result = await self._make_api_request("/set_current_location", payload, session_id, "add_to_cart", parameters)
         
         self.logger.log_info(f"🛒 ADD_TO_CART RESULT", {
             "session_id": session_id,
@@ -238,7 +283,7 @@ class ToolEmulator:
             "args": parameters
         }
         
-        result = await self._make_api_request("/add_to_cart", payload, session_id, "add_to_cart")
+        result = await self._make_api_request("/add_to_cart", payload, session_id, "add_to_cart", parameters)
         
         self.logger.log_info(f"🛒 ADD_TO_CART RESULT", {
             "session_id": session_id,
@@ -260,7 +305,7 @@ class ToolEmulator:
             "args": parameters
         }
         
-        result = await self._make_api_request("/rag_find_products", payload, session_id, "rag_find_products")
+        result = await self._make_api_request("/rag_find_products", payload, session_id, "rag_find_products", parameters)
         
         self.logger.log_info(f"🔍 RAG_FIND_PRODUCTS RESULT", {
             "session_id": session_id,
@@ -282,7 +327,7 @@ class ToolEmulator:
             "args": parameters
         }
         
-        result = await self._make_api_request("/add_to_cart", payload, session_id, "add_to_cart")
+        result = await self._make_api_request("/add_to_cart", payload, session_id, "add_to_cart", parameters)
         
         self.logger.log_info(f"🛒 ADD_TO_CART RESULT", {
             "session_id": session_id,
@@ -304,7 +349,7 @@ class ToolEmulator:
             "args": parameters
         }
         
-        result = await self._make_api_request("/get_cart", payload, session_id, "get_cart")
+        result = await self._make_api_request("/get_cart", payload, session_id, "get_cart", parameters)
         
         self.logger.log_info(f"📋 GET_CURRENT_CART RESULT", {
             "session_id": session_id,
@@ -326,7 +371,7 @@ class ToolEmulator:
             "args": parameters
         }
         
-        result = await self._make_api_request("/confirm_order", payload, session_id, "confirm_order")
+        result = await self._make_api_request("/confirm_order", payload, session_id, "confirm_order", parameters)
         
         self.logger.log_info(f"✅ CONFIRM_ORDER RESULT", {
             "session_id": session_id,

@@ -59,8 +59,14 @@ const BatchDetailPage = () => {
       if (data?.status === 'completed' || data?.status === 'failed') {
         return false;
       }
-      return 2000; // Refetch every 2 seconds
+      // More aggressive polling for running batches to catch sub-progress updates
+      if (data?.status === 'running') {
+        return 1000; // Refetch every 1 second for running batches
+      }
+      return 2000; // Refetch every 2 seconds for other states
     },
+    staleTime: 0, // Always consider data stale to ensure fresh updates
+    refetchOnWindowFocus: true, // Refetch when user focuses the window
   });
 
   // Query for batch results (only when completed)
@@ -202,6 +208,11 @@ const BatchDetailPage = () => {
                 <Typography variant="h6" sx={{ ml: 1 }}>
                   Status
                 </Typography>
+                {batchStatus.status === 'running' && batchStatus.scenarios_in_progress > 0 && (
+                  <Box sx={{ ml: 1, display: 'flex', alignItems: 'center' }}>
+                    <CircularProgress size={16} thickness={6} />
+                  </Box>
+                )}
               </Box>
               <Chip
                 label={batchStatus.status.toUpperCase()}
@@ -230,8 +241,22 @@ const BatchDetailPage = () => {
                 Last updated: {new Date().toLocaleTimeString()}
               </Typography>
               <Typography variant="caption" color="text.secondary">
-                Raw progress: {batchStatus.progress}
+                Precise: {batchStatus.progress?.toFixed(2) || 0}%
               </Typography>
+              {batchStatus.status === 'running' && batchStatus.progress > 0 && (
+                <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+                  {(() => {
+                    const elapsed = batchStatus.started_at ? 
+                      (Date.now() - new Date(batchStatus.started_at).getTime()) / 1000 : 0;
+                    const rate = batchStatus.progress / 100;
+                    const estimatedTotal = rate > 0 ? elapsed / rate : 0;
+                    const remaining = estimatedTotal - elapsed;
+                    return remaining > 0 ? 
+                      `ETA: ${Math.round(remaining / 60)}m ${Math.round(remaining % 60)}s` : 
+                      'Calculating...';
+                  })()}
+                </Typography>
+              )}
             </CardContent>
           </Card>
         </Grid>
@@ -248,6 +273,16 @@ const BatchDetailPage = () => {
               <Typography variant="body2" color="error">
                 {batchStatus.failed_scenarios || 0} failed
               </Typography>
+              {batchStatus.scenarios_in_progress > 0 && (
+                <Typography variant="body2" color="primary">
+                  {batchStatus.scenarios_in_progress} in progress
+                </Typography>
+              )}
+              {batchStatus.current_stage && (
+                <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1 }}>
+                  Stage: {batchStatus.current_stage}
+                </Typography>
+              )}
             </CardContent>
           </Card>
         </Grid>

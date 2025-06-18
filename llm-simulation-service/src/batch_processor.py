@@ -5,9 +5,10 @@ import asyncio
 import uuid
 import json
 import time
+import threading
 from typing import Dict, List, Any, Optional, Callable
 from datetime import datetime
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass, asdict, field
 from enum import Enum
 from src.config import Config
 from src.openai_wrapper import OpenAIWrapper
@@ -41,6 +42,8 @@ class BatchJob:
     progress_percentage: float = 0.0
     results: List[Dict[str, Any]] = None
     error_message: Optional[str] = None
+    current_stage: str = "pending"  # Track what's currently happening
+    scenarios_in_progress: int = 0  # Track how many scenarios are actively processing
     
     def __post_init__(self):
         if self.results is None:
@@ -53,7 +56,8 @@ class BatchProcessor:
     
     def __init__(self, openai_api_key: str, concurrency: Optional[int] = None):
         self.concurrency = concurrency or Config.CONCURRENCY
-        self.semaphore = asyncio.Semaphore(self.concurrency)
+        self._semaphore = None  # Changed from direct initialization
+        self._semaphore_lock = threading.Lock()  # Thread-safe semaphore access
         self.logger = get_logger()
         
         # Initialize components
@@ -71,6 +75,39 @@ class BatchProcessor:
         self._load_existing_batches()
         
         self.logger.log_info(f"BatchProcessor initialized with concurrency: {self.concurrency}")
+    
+    @property
+    def semaphore(self):
+        """Thread-safe lazy initialization of semaphore to avoid event loop issues"""
+        with self._semaphore_lock:
+            try:
+                # Try to get current event loop
+                current_loop = asyncio.get_running_loop()
+                
+                # If we have a semaphore, check if it's bound to the current loop
+                if self._semaphore is not None:
+                    try:
+                        # Try to access the semaphore's loop
+                        # If it fails, we need to recreate it
+                        self._semaphore._get_loop()
+                        return self._semaphore
+                    except RuntimeError:
+                        # Semaphore is bound to a different loop, recreate it
+                        self.logger.log_info("Recreating semaphore for new event loop")
+                        self._semaphore = None
+                
+                # Create new semaphore for current loop
+                if self._semaphore is None:
+                    self._semaphore = asyncio.Semaphore(self.concurrency)
+                    self.logger.log_info(f"Created new semaphore with concurrency: {self.concurrency}")
+                
+                return self._semaphore
+                
+            except RuntimeError:
+                # No event loop running, create semaphore anyway (will be recreated if needed)
+                if self._semaphore is None:
+                    self._semaphore = asyncio.Semaphore(self.concurrency)
+                return self._semaphore
     
     def _load_existing_batches(self):
         """Load existing batches from persistent storage"""
@@ -93,7 +130,9 @@ class BatchProcessor:
                     failed_scenarios=batch_data.get('failed_scenarios', 0),
                     progress_percentage=batch_data.get('progress_percentage', 0.0),
                     results=batch_data.get('results', []),
-                    error_message=batch_data.get('error_message')
+                    error_message=batch_data.get('error_message'),
+                    current_stage=batch_data.get('current_stage', "pending"),
+                    scenarios_in_progress=batch_data.get('scenarios_in_progress', 0)
                 )
                 
                 self.active_jobs[batch_id] = batch_job
@@ -122,7 +161,9 @@ class BatchProcessor:
                 'failed_scenarios': batch_job.failed_scenarios,
                 'progress_percentage': batch_job.progress_percentage,
                 'results': batch_job.results,
-                'error_message': batch_job.error_message
+                'error_message': batch_job.error_message,
+                'current_stage': batch_job.current_stage,
+                'scenarios_in_progress': batch_job.scenarios_in_progress
             }
             self.persistent_storage.save_batch_metadata(batch_data)
         except Exception as e:
@@ -172,7 +213,9 @@ class BatchProcessor:
             'created_at': job.created_at.isoformat(),
             'started_at': job.started_at.isoformat() if job.started_at else None,
             'completed_at': job.completed_at.isoformat() if job.completed_at else None,
-            'error_message': job.error_message
+            'error_message': job.error_message,
+            'current_stage': job.current_stage,
+            'scenarios_in_progress': job.scenarios_in_progress
         }
     
     def get_batch_results(self, batch_id: str) -> Optional[List[Dict[str, Any]]]:
@@ -197,6 +240,8 @@ class BatchProcessor:
         # Update job status
         job.status = BatchStatus.RUNNING
         job.started_at = datetime.now()
+        job.current_stage = "initializing"
+        job.scenarios_in_progress = 0
         
         # Create progress tracking lock for thread safety
         progress_lock = asyncio.Lock()
@@ -211,6 +256,10 @@ class BatchProcessor:
         })
         
         try:
+            # Update stage to processing
+            job.current_stage = "processing_scenarios"
+            self._save_batch_to_storage(job)
+            
             # Create tasks for all scenarios
             tasks = []
             for i, scenario in enumerate(job.scenarios):
@@ -225,6 +274,11 @@ class BatchProcessor:
             
             # Run all tasks concurrently
             results = await asyncio.gather(*tasks, return_exceptions=True)
+            
+            # Update stage to finalizing
+            job.current_stage = "finalizing"
+            job.scenarios_in_progress = 0
+            self._save_batch_to_storage(job)
             
             # Process results
             successful_results = []
@@ -256,6 +310,8 @@ class BatchProcessor:
             job.progress_percentage = 100.0
             job.status = BatchStatus.COMPLETED
             job.completed_at = datetime.now()
+            job.current_stage = "completed"
+            job.scenarios_in_progress = 0
             
             # Save updated state to persistent storage
             self._save_batch_to_storage(job)
@@ -285,6 +341,8 @@ class BatchProcessor:
             job.status = BatchStatus.FAILED
             job.error_message = str(e)
             job.completed_at = datetime.now()
+            job.current_stage = "failed"
+            job.scenarios_in_progress = 0
             
             self.logger.log_error(f"Batch processing failed", exception=e, extra_data={'batch_id': batch_id})
             
@@ -301,17 +359,26 @@ class BatchProcessor:
                 
                 self.logger.log_info(f"Processing scenario {scenario_index}: {scenario_name}", extra_data={'batch_id': batch_id})
                 
+                # Update progress: Scenario started
+                await self._update_sub_progress(batch_id, scenario_index, "started", progress_lock)
+                
                 # Run conversation (with or without tools based on batch setting)
                 job = self.active_jobs[batch_id]
                 
                 # Safety check for conversation engine
                 if self.conversation_engine is None:
                     raise ValueError("ConversationEngine is not initialized")
+
+                # Update progress: Conversation in progress
+                await self._update_sub_progress(batch_id, scenario_index, "conversation", progress_lock)
                 
                 if job.use_tools:
                     conversation_result = await self.conversation_engine.run_conversation_with_tools(scenario)
                 else:
                     conversation_result = await self.conversation_engine.run_conversation(scenario)
+                
+                # Update progress: Evaluation in progress
+                await self._update_sub_progress(batch_id, scenario_index, "evaluation", progress_lock)
                 
                 # Evaluate conversation if successful
                 if conversation_result.get('status') == 'completed':
@@ -332,6 +399,22 @@ class BatchProcessor:
                         'end_time': conversation_result.get('end_time'),
                         'conversation_history': conversation_result.get('conversation_history')
                     }
+                elif conversation_result.get('status') == 'failed_api_blocked':
+                    # Special handling for API blocked scenarios - treat as partial success
+                    combined_result = {
+                        'scenario_index': scenario_index,
+                        'scenario': scenario_name,
+                        'session_id': conversation_result.get('session_id'),
+                        'status': 'failed_api_blocked',
+                        'error': conversation_result.get('error'),
+                        'total_turns': conversation_result.get('total_turns', 0),
+                        'duration_seconds': conversation_result.get('duration_seconds', 0),
+                        'score': 2 if conversation_result.get('partial_completion') else 1,  # Better score if partially completed
+                        'comment': f"API заблокирован (географические ограничения). Сделано ходов: {conversation_result.get('total_turns', 0)}",
+                        'conversation_history': conversation_result.get('conversation_history', []),
+                        'graceful_degradation': True,
+                        'partial_completion': conversation_result.get('partial_completion', False)
+                    }
                 else:
                     # Conversation failed
                     combined_result = {
@@ -344,6 +427,9 @@ class BatchProcessor:
                         'score': 1,
                         'comment': f"Разговор не завершен: {conversation_result.get('error', 'неизвестная ошибка')}"
                     }
+                
+                # Update progress: Scenario completed
+                await self._update_sub_progress(batch_id, scenario_index, "completed", progress_lock)
                 
                 # Update progress
                 if progress_callback:
@@ -370,6 +456,9 @@ class BatchProcessor:
                 return combined_result
                 
             except Exception as e:
+                # Update progress: Scenario failed
+                await self._update_sub_progress(batch_id, scenario_index, "failed", progress_lock)
+                
                 # Enhanced error logging with debug information
                 error_context = {
                     'batch_id': batch_id,
@@ -383,24 +472,101 @@ class BatchProcessor:
                 self.logger.log_error(f"Failed to process scenario {scenario_index}", exception=e, extra_data=error_context)
                 raise e
     
-    async def _update_progress(self, batch_id: str, completed_count: int = None):
-        """Update batch job progress"""
+    async def _update_sub_progress(self, batch_id: str, scenario_index: int, stage: str, progress_lock: asyncio.Lock = None):
+        """Update sub-progress for individual scenario stages"""
+        stage_weights = {
+            "started": 0.1,      # 10% of scenario completion
+            "conversation": 0.4, # 40% of scenario completion  
+            "evaluation": 0.8,   # 80% of scenario completion
+            "completed": 1.0,    # 100% of scenario completion
+            "failed": 1.0        # Count as completed for progress purposes
+        }
+        
+        if batch_id not in self.active_jobs:
+            return
+            
+        weight = stage_weights.get(stage, 0.0)
+        
+        # Calculate partial progress for this scenario
+        scenario_progress = weight / self.active_jobs[batch_id].total_scenarios * 100.0
+        
+        # Use lock to prevent race conditions
+        if progress_lock:
+            async with progress_lock:
+                await self._update_detailed_progress(batch_id, scenario_index, stage, scenario_progress)
+        else:
+            await self._update_detailed_progress(batch_id, scenario_index, stage, scenario_progress)
+    
+    async def _update_detailed_progress(self, batch_id: str, scenario_index: int, stage: str, additional_progress: float):
+        """Thread-safe detailed progress update"""
         if batch_id in self.active_jobs:
             job = self.active_jobs[batch_id]
             old_progress = job.progress_percentage
+            old_in_progress = job.scenarios_in_progress
+            
+            # Update scenarios in progress counter
+            if stage == "started":
+                job.scenarios_in_progress += 1
+            elif stage in ["completed", "failed"]:
+                job.scenarios_in_progress = max(0, job.scenarios_in_progress - 1)
+            
+            # Add the partial progress
+            job.progress_percentage = min(job.progress_percentage + additional_progress, 100.0)
+            
+            # Update current stage description based on activity
+            if job.scenarios_in_progress > 0:
+                job.current_stage = f"processing ({job.scenarios_in_progress} active)"
+            elif job.completed_scenarios == 0:
+                job.current_stage = "starting"
+            elif job.completed_scenarios == job.total_scenarios:
+                job.current_stage = "completed"
+            else:
+                job.current_stage = "processing"
+            
+            # Log detailed progress for debugging
+            self.logger.log_info(f"Sub-progress updated for batch {batch_id}", extra_data={
+                'scenario_index': scenario_index,
+                'stage': stage,
+                'old_progress': old_progress,
+                'new_progress': job.progress_percentage,
+                'additional_progress': additional_progress,
+                'completed_scenarios': job.completed_scenarios,
+                'total_scenarios': job.total_scenarios,
+                'scenarios_in_progress': job.scenarios_in_progress,
+                'current_stage': job.current_stage
+            })
+            
+            # Save state more frequently for progress visibility
+            self._save_batch_to_storage(job)
+
+    async def _update_progress(self, batch_id: str, completed_count: int = None):
+        """Update batch job progress - now more reliable with detailed tracking"""
+        if batch_id in self.active_jobs:
+            job = self.active_jobs[batch_id]
+            old_progress = job.progress_percentage
+            old_completed = job.completed_scenarios
+            
             if completed_count is not None:
                 job.completed_scenarios = completed_count
             else:
                 # If no count provided, increment by 1
                 job.completed_scenarios += 1
-            job.progress_percentage = (job.completed_scenarios / job.total_scenarios) * 100.0
+            
+            # Recalculate progress based on completed scenarios
+            # This ensures progress is always accurate regardless of sub-progress
+            base_progress = (job.completed_scenarios / job.total_scenarios) * 100.0
+            
+            # Keep the higher of the two (in case sub-progress is ahead)
+            job.progress_percentage = max(base_progress, job.progress_percentage)
             
             # Log progress update for debugging
             self.logger.log_info(f"Progress updated for batch {batch_id}", extra_data={
                 'old_progress': old_progress,
                 'new_progress': job.progress_percentage,
-                'completed_scenarios': job.completed_scenarios,
-                'total_scenarios': job.total_scenarios
+                'old_completed_scenarios': old_completed,
+                'new_completed_scenarios': job.completed_scenarios,
+                'total_scenarios': job.total_scenarios,
+                'base_progress': base_progress
             })
     
     def cancel_batch(self, batch_id: str) -> bool:

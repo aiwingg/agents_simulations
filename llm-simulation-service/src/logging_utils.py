@@ -35,6 +35,10 @@ class SimulationLogger:
         self.conversation_logger = logging.getLogger('simulation_conversations')
         self.conversation_logger.setLevel(logging.INFO)
         
+        # OpenAI API logger (requests and responses)
+        self.openai_logger = logging.getLogger('simulation_openai')
+        self.openai_logger.setLevel(logging.INFO)
+        
         # Setup file handlers
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
         batch_suffix = f"_{self.batch_id}" if self.batch_id else ""
@@ -76,6 +80,14 @@ class SimulationLogger:
         )
         conversation_handler.setFormatter(logging.Formatter('%(message)s'))
         self.conversation_logger.addHandler(conversation_handler)
+        
+        # OpenAI API log handler (JSON format) with UTF-8 encoding
+        openai_handler = logging.FileHandler(
+            os.path.join(Config.LOGS_DIR, f'openai_api_{timestamp}{batch_suffix}.jsonl'),
+            encoding='utf-8'
+        )
+        openai_handler.setFormatter(logging.Formatter('%(message)s'))
+        self.openai_logger.addHandler(openai_handler)
     
     def log_info(self, message: str, extra_data: Optional[Dict[str, Any]] = None):
         """Log info message"""
@@ -130,6 +142,62 @@ class SimulationLogger:
             'event_type': 'conversation_complete'
         }
         self.conversation_logger.info(json.dumps(completion_data, ensure_ascii=False))
+    
+    def log_openai_request(self, session_id: str, request_id: str, model: str, messages: list, 
+                          temperature: float = 0.7, seed: Optional[int] = None, 
+                          tools: Optional[list] = None, response_format: Optional[dict] = None):
+        """Log OpenAI API request"""
+        request_data = {
+            'event_type': 'openai_request',
+            'request_id': request_id,
+            'session_id': session_id,
+            'model': model,
+            'messages': messages,
+            'temperature': temperature,
+            'seed': seed,
+            'tools': tools,
+            'response_format': response_format,
+            'timestamp': datetime.now().isoformat()
+        }
+        self.openai_logger.info(json.dumps(request_data, ensure_ascii=False))
+    
+    def log_openai_response(self, session_id: str, request_id: str, response_content: Any, 
+                           usage: dict, cost_estimate: float, duration_ms: float, 
+                           attempt: int = 1, error: Optional[str] = None):
+        """Log OpenAI API response"""
+        # Handle different response types
+        if hasattr(response_content, 'content'):
+            content = response_content.content
+            tool_calls = getattr(response_content, 'tool_calls', None)
+            if tool_calls:
+                tool_calls = [
+                    {
+                        'id': tc.id,
+                        'type': tc.type,
+                        'function': {
+                            'name': tc.function.name,
+                            'arguments': tc.function.arguments
+                        }
+                    } for tc in tool_calls
+                ]
+        else:
+            content = str(response_content) if response_content else None
+            tool_calls = None
+        
+        response_data = {
+            'event_type': 'openai_response',
+            'request_id': request_id,
+            'session_id': session_id,
+            'content': content,
+            'tool_calls': tool_calls,
+            'usage': usage,
+            'cost_estimate': cost_estimate,
+            'duration_ms': duration_ms,
+            'attempt': attempt,
+            'error': error,
+            'timestamp': datetime.now().isoformat()
+        }
+        self.openai_logger.info(json.dumps(response_data, ensure_ascii=False))
 
 # Global logger instance
 _global_logger: Optional[SimulationLogger] = None

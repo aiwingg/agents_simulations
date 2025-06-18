@@ -19,6 +19,14 @@ import {
   Tooltip,
   TextField,
   InputAdornment,
+  Accordion,
+  AccordionSummary,
+  AccordionDetails,
+  List,
+  ListItem,
+  ListItemIcon,
+  ListItemText,
+  Collapse,
 } from '@mui/material';
 import {
   Close,
@@ -29,6 +37,13 @@ import {
   Download,
   Fullscreen,
   FullscreenExit,
+  Build,
+  Code,
+  ExpandMore,
+  Assessment,
+  PlayArrow,
+  CheckCircle,
+  Error as ErrorIcon,
 } from '@mui/icons-material';
 import { toast } from 'sonner';
 
@@ -36,18 +51,169 @@ const TranscriptModal = ({ open, onClose, session }) => {
   const [viewMode, setViewMode] = useState('chat'); // 'chat' or 'json'
   const [searchTerm, setSearchTerm] = useState('');
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [showToolDetails, setShowToolDetails] = useState({});
 
-  // Filter conversation history based on search term
+  // Enhanced filter for conversation history including tool calls and results
   const filteredHistory = useMemo(() => {
     if (!session?.conversation_history || !searchTerm) {
       return session?.conversation_history || [];
     }
     
-    return session.conversation_history.filter(entry =>
-      entry.content.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      entry.speaker.toLowerCase().includes(searchTerm.toLowerCase())
-    );
+    return session.conversation_history.filter(entry => {
+      // Search in content
+      const contentMatch = entry.content?.toLowerCase().includes(searchTerm.toLowerCase());
+      
+      // Search in speaker
+      const speakerMatch = entry.speaker?.toLowerCase().includes(searchTerm.toLowerCase());
+      
+      // Search in tool calls
+      const toolCallsMatch = entry.tool_calls?.some(call => 
+        call.function?.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        call.function?.arguments?.toLowerCase().includes(searchTerm.toLowerCase())
+      );
+      
+      // Search in tool results
+      const toolResultsMatch = entry.tool_results?.some(result => 
+        JSON.stringify(result).toLowerCase().includes(searchTerm.toLowerCase())
+      );
+      
+      return contentMatch || speakerMatch || toolCallsMatch || toolResultsMatch;
+    });
   }, [session?.conversation_history, searchTerm]);
+
+  const toggleToolDetails = (entryIndex) => {
+    setShowToolDetails(prev => ({
+      ...prev,
+      [entryIndex]: !prev[entryIndex]
+    }));
+  };
+
+  const renderToolCalls = (toolCalls, entryIndex) => {
+    if (!toolCalls || toolCalls.length === 0) return null;
+
+    return (
+      <Box sx={{ mt: 2 }}>
+        <Button
+          size="small"
+          startIcon={<Build />}
+          onClick={() => toggleToolDetails(entryIndex)}
+          sx={{ mb: 1 }}
+          variant="outlined"
+          color="primary"
+        >
+          {toolCalls.length} Tool Call{toolCalls.length > 1 ? 's' : ''} Used
+        </Button>
+        
+        <Collapse in={showToolDetails[entryIndex]}>
+          <Box sx={{ ml: 2 }}>
+            {toolCalls.map((call, index) => (
+              <Card key={index} sx={{ mb: 1, bgcolor: 'primary.50' }}>
+                <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
+                  <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
+                    <PlayArrow sx={{ mr: 1, color: 'primary.main' }} />
+                    <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
+                      {call.function?.name || 'Unknown Tool'}
+                    </Typography>
+                    <Chip 
+                      label="Tool Call" 
+                      size="small" 
+                      color="primary" 
+                      variant="outlined" 
+                      sx={{ ml: 1 }} 
+                    />
+                  </Box>
+                  {call.function?.arguments && (
+                    <Paper sx={{ p: 1, bgcolor: 'background.paper', mt: 1 }}>
+                      <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.5 }}>
+                        Arguments:
+                      </Typography>
+                      <Typography variant="body2" sx={{ fontFamily: 'monospace', fontSize: '0.75rem' }}>
+                        {call.function.arguments}
+                      </Typography>
+                    </Paper>
+                  )}
+                </CardContent>
+              </Card>
+            ))}
+          </Box>
+        </Collapse>
+      </Box>
+    );
+  };
+
+  const renderToolResults = (toolResults, entryIndex) => {
+    if (!toolResults || toolResults.length === 0) return null;
+
+    return (
+      <Box sx={{ mt: 2 }}>
+        <Button
+          size="small"
+          startIcon={<CheckCircle />}
+          onClick={() => toggleToolDetails(`results_${entryIndex}`)}
+          sx={{ mb: 1 }}
+          variant="outlined"
+          color="success"
+        >
+          {toolResults.length} Tool Result{toolResults.length > 1 ? 's' : ''}
+        </Button>
+        
+        <Collapse in={showToolDetails[`results_${entryIndex}`]}>
+          <Box sx={{ ml: 2 }}>
+            {toolResults.map((result, index) => (
+              <Card key={index} sx={{ mb: 1, bgcolor: 'success.50' }}>
+                <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
+                  <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
+                    <CheckCircle sx={{ mr: 1, color: 'success.main' }} />
+                    <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
+                      Tool Response #{index + 1}
+                    </Typography>
+                    <Chip 
+                      label="Result" 
+                      size="small" 
+                      color="success" 
+                      variant="outlined" 
+                      sx={{ ml: 1 }} 
+                    />
+                  </Box>
+                  <Paper sx={{ p: 1, bgcolor: 'background.paper', mt: 1 }}>
+                    <Typography variant="body2" sx={{ fontFamily: 'monospace', fontSize: '0.75rem' }}>
+                      {typeof result === 'object' ? JSON.stringify(result, null, 2) : String(result)}
+                    </Typography>
+                  </Paper>
+                </CardContent>
+              </Card>
+            ))}
+          </Box>
+        </Collapse>
+      </Box>
+    );
+  };
+
+  const renderEvaluatorComment = () => {
+    if (!session?.comment) return null;
+
+    return (
+      <Card sx={{ mb: 2, bgcolor: 'warning.50', border: '1px solid', borderColor: 'warning.200' }}>
+        <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
+            <Assessment sx={{ mr: 1, color: 'warning.main' }} />
+            <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
+              Evaluator's Comment
+            </Typography>
+            <Chip 
+              label={`Score: ${session.score}/3`}
+              size="small" 
+              color={session.score === 3 ? 'success' : session.score === 2 ? 'warning' : 'error'} 
+              sx={{ ml: 1 }} 
+            />
+          </Box>
+          <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap', fontStyle: 'italic' }}>
+            {session.comment}
+          </Typography>
+        </CardContent>
+      </Card>
+    );
+  };
 
   const handleCopyTranscript = () => {
     if (!session?.conversation_history) {
@@ -55,12 +221,43 @@ const TranscriptModal = ({ open, onClose, session }) => {
       return;
     }
 
-    const text = session.conversation_history
-      .map((entry, index) => `${index + 1}. ${entry.speaker.toUpperCase()}: ${entry.content}`)
+    let text = '';
+    
+    // Add evaluator comment if present
+    if (session.comment) {
+      text += `EVALUATOR'S COMMENT (Score: ${session.score}/3):\n${session.comment}\n\n`;
+      text += '='.repeat(50) + '\nCONVERSATION TRANSCRIPT\n' + '='.repeat(50) + '\n\n';
+    }
+
+    text += session.conversation_history
+      .map((entry, index) => {
+        let entryText = `${index + 1}. ${entry.speaker.toUpperCase()}: ${entry.content || '[No content]'}`;
+        
+        // Add tool calls information
+        if (entry.tool_calls && entry.tool_calls.length > 0) {
+          entryText += '\n   🔧 TOOL CALLS:';
+          entry.tool_calls.forEach((call, callIndex) => {
+            entryText += `\n      ${callIndex + 1}. ${call.function?.name || 'Unknown Tool'}`;
+            if (call.function?.arguments) {
+              entryText += `\n         Arguments: ${call.function.arguments}`;
+            }
+          });
+        }
+        
+        // Add tool results information
+        if (entry.tool_results && entry.tool_results.length > 0) {
+          entryText += '\n   📋 TOOL RESULTS:';
+          entry.tool_results.forEach((result, resultIndex) => {
+            entryText += `\n      ${resultIndex + 1}. ${typeof result === 'object' ? JSON.stringify(result, null, 2) : String(result)}`;
+          });
+        }
+        
+        return entryText;
+      })
       .join('\n\n');
 
     navigator.clipboard.writeText(text).then(() => {
-      toast.success('Transcript copied to clipboard');
+      toast.success('Enhanced transcript copied to clipboard');
     }).catch(() => {
       toast.error('Failed to copy transcript');
     });
@@ -85,18 +282,49 @@ const TranscriptModal = ({ open, onClose, session }) => {
       return;
     }
 
-    const text = session.conversation_history
-      .map((entry, index) => `${index + 1}. ${entry.speaker.toUpperCase()}: ${entry.content}`)
+    let text = '';
+    
+    // Add evaluator comment if present
+    if (session.comment) {
+      text += `EVALUATOR'S COMMENT (Score: ${session.score}/3):\n${session.comment}\n\n`;
+      text += '='.repeat(50) + '\nCONVERSATION TRANSCRIPT\n' + '='.repeat(50) + '\n\n';
+    }
+
+    text += session.conversation_history
+      .map((entry, index) => {
+        let entryText = `${index + 1}. ${entry.speaker.toUpperCase()}: ${entry.content || '[No content]'}`;
+        
+        // Add tool calls information
+        if (entry.tool_calls && entry.tool_calls.length > 0) {
+          entryText += '\n   🔧 TOOL CALLS:';
+          entry.tool_calls.forEach((call, callIndex) => {
+            entryText += `\n      ${callIndex + 1}. ${call.function?.name || 'Unknown Tool'}`;
+            if (call.function?.arguments) {
+              entryText += `\n         Arguments: ${call.function.arguments}`;
+            }
+          });
+        }
+        
+        // Add tool results information
+        if (entry.tool_results && entry.tool_results.length > 0) {
+          entryText += '\n   📋 TOOL RESULTS:';
+          entry.tool_results.forEach((result, resultIndex) => {
+            entryText += `\n      ${resultIndex + 1}. ${typeof result === 'object' ? JSON.stringify(result, null, 2) : String(result)}`;
+          });
+        }
+        
+        return entryText;
+      })
       .join('\n\n');
 
     const blob = new Blob([text], { type: 'text/plain' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `transcript_${session.session_id?.slice(0, 8) || 'session'}.txt`;
+    link.download = `enhanced_transcript_${session.session_id?.slice(0, 8) || 'session'}.txt`;
     link.click();
     URL.revokeObjectURL(url);
-    toast.success('Transcript downloaded');
+    toast.success('Enhanced transcript downloaded');
   };
 
   const handleDownloadJSON = () => {
@@ -196,7 +424,7 @@ const TranscriptModal = ({ open, onClose, session }) => {
           {viewMode === 'chat' && (
             <TextField
               size="small"
-              placeholder="Search in conversation..."
+              placeholder="Search in conversation, tool calls, and results..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               InputProps={{
@@ -206,7 +434,7 @@ const TranscriptModal = ({ open, onClose, session }) => {
                   </InputAdornment>
                 ),
               }}
-              sx={{ minWidth: 250 }}
+              sx={{ minWidth: 300 }}
             />
           )}
 
@@ -226,6 +454,9 @@ const TranscriptModal = ({ open, onClose, session }) => {
         <Box sx={{ flex: 1, overflow: 'auto', p: 2 }}>
           {viewMode === 'chat' ? (
             <Box>
+              {/* Evaluator Comment */}
+              {renderEvaluatorComment()}
+              
               {filteredHistory.length > 0 ? (
                 <>
                   {searchTerm && (
@@ -257,18 +488,52 @@ const TranscriptModal = ({ open, onClose, session }) => {
                           >
                             {entry.speaker === 'agent' ? <Support /> : <Person />}
                           </Avatar>
-                          <Box>
+                          <Box sx={{ flex: 1 }}>
                             <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
                               {entry.speaker === 'agent' ? 'Agent' : 'Client'}
                             </Typography>
                             <Typography variant="caption" color="text.secondary">
-                              Turn {index + 1}
+                              Turn {entry.turn || index + 1}
+                              {entry.timestamp && (
+                                <> • {new Date(entry.timestamp).toLocaleTimeString()}</>
+                              )}
                             </Typography>
                           </Box>
+                          {/* Tool Indicators */}
+                          <Box sx={{ display: 'flex', gap: 0.5 }}>
+                            {entry.tool_calls && entry.tool_calls.length > 0 && (
+                              <Chip 
+                                icon={<Build />}
+                                label={entry.tool_calls.length}
+                                size="small" 
+                                color="primary" 
+                                variant="outlined"
+                              />
+                            )}
+                            {entry.tool_results && entry.tool_results.length > 0 && (
+                              <Chip 
+                                icon={<CheckCircle />}
+                                label={entry.tool_results.length}
+                                size="small" 
+                                color="success" 
+                                variant="outlined"
+                              />
+                            )}
+                          </Box>
                         </Box>
-                        <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap' }}>
-                          {entry.content}
-                        </Typography>
+                        
+                        {/* Message Content */}
+                        {entry.content && (
+                          <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap', mb: entry.tool_calls || entry.tool_results ? 1 : 0 }}>
+                            {entry.content}
+                          </Typography>
+                        )}
+                        
+                        {/* Tool Calls */}
+                        {renderToolCalls(entry.tool_calls, index)}
+                        
+                        {/* Tool Results */}
+                        {renderToolResults(entry.tool_results, index)}
                       </CardContent>
                     </Card>
                   ))}
