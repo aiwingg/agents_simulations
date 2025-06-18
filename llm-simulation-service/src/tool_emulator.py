@@ -261,7 +261,7 @@ class ToolEmulator:
             "args": parameters
         }
         
-        result = await self._make_api_request("/set_current_location", payload, session_id, "add_to_cart", parameters)
+        result = await self._make_api_request("/change_delivery_date", payload, session_id, "add_to_cart", parameters)
         
         self.logger.log_info(f"🛒 ADD_TO_CART RESULT", {
             "session_id": session_id,
@@ -283,7 +283,7 @@ class ToolEmulator:
             "args": parameters
         }
         
-        result = await self._make_api_request("/add_to_cart", payload, session_id, "add_to_cart", parameters)
+        result = await self._make_api_request("/remove_from_cart", payload, session_id, "add_to_cart", parameters)
         
         self.logger.log_info(f"🛒 ADD_TO_CART RESULT", {
             "session_id": session_id,
