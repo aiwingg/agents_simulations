@@ -20,7 +20,7 @@ Use this scoring scale:
 You MUST respond with valid JSON in exactly this format:
 {
   "score": [1, 2, or 3],
-  "comment": "Brief explanation of the score in Russian, focusing on key strengths or areas for improvement"
+  "comment": "Explanation of errors that the agent made in Russian. For every error provide turn number, description and the root cause (study both tools's input and output,  errors usually happen because of a wrong tools usage)"
 }
 
 Be objective and consistent in your evaluation. Focus on the overall customer experience and whether the business goal (completing an order) was achieved effectively.
