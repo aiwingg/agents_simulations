@@ -6,27 +6,28 @@ from typing import Dict, List, Any, Tuple, Optional
 from src.config import Config
 from src.openai_wrapper import OpenAIWrapper
 from src.logging_utils import get_logger
+from src.prompt_specification import PromptSpecificationManager
 
 class ConversationEvaluator:
     """Evaluates conversations and provides scores with comments"""
     
-    def __init__(self, openai_wrapper: OpenAIWrapper):
+    def __init__(self, openai_wrapper: OpenAIWrapper, prompt_spec_name: str = "default_prompts"):
         self.openai = openai_wrapper
         self.logger = get_logger()
         
-        # Load evaluator prompt template
-        self.evaluator_prompt = self._load_evaluator_prompt()
-    
-    def _load_evaluator_prompt(self) -> str:
-        """Load evaluator prompt template from file"""
-        try:
-            prompt_path = Config.get_prompt_path("evaluator_system")
-            with open(prompt_path, 'r', encoding='utf-8') as f:
-                return f.read()
-        except Exception as e:
-            self.logger.log_error("Failed to load evaluator prompt template", exception=e)
-            return """You are an expert evaluator of customer service conversations. 
+        # Load evaluator prompt from specification
+        self.prompt_manager = PromptSpecificationManager()
+        self.prompt_specification = self.prompt_manager.load_specification(prompt_spec_name)
+        
+        evaluator_spec = self.prompt_specification.get_agent_prompt('evaluator')
+        if evaluator_spec:
+            self.evaluator_prompt = evaluator_spec.prompt
+        else:
+            self.logger.log_error("No evaluator specification found, using fallback prompt")
+            self.evaluator_prompt = """You are an expert evaluator of customer service conversations. 
             Evaluate the conversation and respond with JSON: {"score": [1,2,3], "comment": "explanation"}"""
+        
+        self.logger.log_info(f"ConversationEvaluator initialized with prompt specification: {prompt_spec_name}")
     
     def _format_conversation_for_evaluation(self, conversation_history: List[Dict[str, Any]]) -> str:
         """Format conversation history for evaluation"""
@@ -84,60 +85,52 @@ class ConversationEvaluator:
                 'raw_response': evaluation_response
             }
             
-            # Log evaluation completion
-            self.logger.log_conversation_complete(
-                session_id=session_id,
-                total_turns=len(conversation_history),
-                final_score=score,
-                evaluator_comment=comment,
-                status='evaluated'
-            )
+            self.logger.log_info(f"Conversation evaluation completed", extra_data={
+                'session_id': session_id,
+                'score': score,
+                'comment_length': len(comment) if comment else 0
+            })
             
             return evaluation_result
             
         except Exception as e:
-            self.logger.log_error(f"Evaluation failed", exception=e, extra_data={'session_id': session_id})
+            self.logger.log_error(f"Failed to evaluate conversation", exception=e, extra_data={
+                'session_id': session_id,
+                'scenario': scenario
+            })
             
-            # Return fallback evaluation
             return {
                 'session_id': session_id,
                 'scenario': scenario,
                 'score': 1,
-                'comment': f"Ошибка оценки: {str(e)}",
+                'comment': f"Ошибка оценки разговора: {str(e)}",
                 'evaluation_status': 'failed',
                 'error': str(e)
             }
     
     def _parse_evaluation_response(self, response: Dict[str, Any], session_id: str) -> Tuple[int, str]:
         """Parse and validate evaluation response"""
-        
-        # Check if response contains error (from JSON parsing failure)
-        if "error" in response:
-            self.logger.log_error(f"Evaluator returned invalid JSON", extra_data={
+        try:
+            score = response.get('score', 1)
+            comment = response.get('comment', 'Комментарий отсутствует')
+            
+            # Validate score
+            if not isinstance(score, int) or score not in [1, 2, 3]:
+                self.logger.log_error(f"Invalid score in evaluation response: {score}", extra_data={'session_id': session_id})
+                score = 1
+            
+            # Validate comment
+            if not isinstance(comment, str):
+                comment = str(comment) if comment else 'Комментарий отсутствует'
+            
+            return score, comment
+            
+        except Exception as e:
+            self.logger.log_error(f"Failed to parse evaluation response", exception=e, extra_data={
                 'session_id': session_id,
                 'response': response
             })
-            return 1, "invalid evaluator output"
-        
-        # Extract score and comment
-        score = response.get('score')
-        comment = response.get('comment', '')
-        
-        # Validate score
-        if not isinstance(score, int) or score not in [1, 2, 3]:
-            self.logger.log_error(f"Invalid score from evaluator: {score}", extra_data={'session_id': session_id})
-            score = 1
-            comment = f"Некорректная оценка от системы оценки. Оригинальный ответ: {comment}"
-        
-        # Validate comment
-        if not isinstance(comment, str):
-            comment = str(comment) if comment else "Комментарий отсутствует"
-        
-        # Ensure comment is not empty
-        if not comment.strip():
-            comment = "Комментарий не предоставлен"
-        
-        return score, comment
+            return 1, f"Ошибка парсинга оценки: {str(e)}"
     
     async def batch_evaluate_conversations(self, conversations: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """Evaluate multiple conversations"""

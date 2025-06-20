@@ -114,11 +114,11 @@ class ResultStorage:
             
             # Basic statistics
             total_scenarios = len(results)
-            successful_scenarios = len(df[df['status'] == 'completed'])
-            failed_scenarios = len(df[df['status'] == 'failed'])
+            successful_scenarios = len(df[df['status'] == 'completed']) if 'status' in df.columns else 0
+            failed_scenarios = len(df[df['status'] == 'failed']) if 'status' in df.columns else 0
             
             # Score statistics
-            scores = df['score'].dropna()
+            scores = df['score'].dropna() if 'score' in df.columns else pd.Series(dtype=float)
             score_stats = {
                 'mean': float(scores.mean()) if len(scores) > 0 else 0,
                 'median': float(scores.median()) if len(scores) > 0 else 0,
@@ -152,14 +152,23 @@ class ResultStorage:
                 }
             
             # Duration statistics
-            durations = df['duration_seconds'].dropna()
-            duration_stats = {
-                'mean': float(durations.mean()) if len(durations) > 0 else 0,
-                'median': float(durations.median()) if len(durations) > 0 else 0,
-                'min': float(durations.min()) if len(durations) > 0 else 0,
-                'max': float(durations.max()) if len(durations) > 0 else 0,
-                'total': float(durations.sum()) if len(durations) > 0 else 0
-            }
+            if 'duration_seconds' in df.columns:
+                durations = df['duration_seconds'].dropna()
+                duration_stats = {
+                    'mean': float(durations.mean()) if len(durations) > 0 else 0,
+                    'median': float(durations.median()) if len(durations) > 0 else 0,
+                    'min': float(durations.min()) if len(durations) > 0 else 0,
+                    'max': float(durations.max()) if len(durations) > 0 else 0,
+                    'total': float(durations.sum()) if len(durations) > 0 else 0
+                }
+            else:
+                duration_stats = {
+                    'mean': 0,
+                    'median': 0,
+                    'min': 0,
+                    'max': 0,
+                    'total': 0
+                }
             
             # Scenario performance (handle missing columns gracefully)
             agg_dict = {'score': ['mean', 'count']}

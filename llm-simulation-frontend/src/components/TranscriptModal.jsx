@@ -81,6 +81,23 @@ const TranscriptModal = ({ open, onClose, session }) => {
     });
   }, [session?.conversation_history, searchTerm]);
 
+  // Helper function to determine if speaker is an agent
+  const isAgentSpeaker = (speaker) => {
+    return speaker && speaker.startsWith('agent_');
+  };
+
+  // Helper function to get display name for speaker
+  const getSpeakerDisplayName = (speaker) => {
+    if (!speaker) return 'Unknown';
+    if (speaker === 'client') return 'Client';
+    if (speaker.startsWith('agent_')) {
+      // Extract agent type from speaker (e.g., "agent_agent" -> "Agent", "agent_support" -> "Support Agent")
+      const agentType = speaker.replace('agent_', '');
+      return agentType === 'agent' ? 'Agent' : `${agentType.charAt(0).toUpperCase() + agentType.slice(1)} Agent`;
+    }
+    return speaker.charAt(0).toUpperCase() + speaker.slice(1);
+  };
+
   const toggleToolDetails = (entryIndex) => {
     setShowToolDetails(prev => ({
       ...prev,
@@ -231,7 +248,7 @@ const TranscriptModal = ({ open, onClose, session }) => {
 
     text += session.conversation_history
       .map((entry, index) => {
-        let entryText = `${index + 1}. ${entry.speaker.toUpperCase()}: ${entry.content || '[No content]'}`;
+        let entryText = `${index + 1}. ${getSpeakerDisplayName(entry.speaker).toUpperCase()}: ${entry.content || '[No content]'}`;
         
         // Add tool calls information
         if (entry.tool_calls && entry.tool_calls.length > 0) {
@@ -292,7 +309,7 @@ const TranscriptModal = ({ open, onClose, session }) => {
 
     text += session.conversation_history
       .map((entry, index) => {
-        let entryText = `${index + 1}. ${entry.speaker.toUpperCase()}: ${entry.content || '[No content]'}`;
+        let entryText = `${index + 1}. ${getSpeakerDisplayName(entry.speaker).toUpperCase()}: ${entry.content || '[No content]'}`;
         
         // Add tool calls information
         if (entry.tool_calls && entry.tool_calls.length > 0) {
@@ -471,8 +488,8 @@ const TranscriptModal = ({ open, onClose, session }) => {
                       key={index} 
                       sx={{ 
                         mb: 2, 
-                        ml: entry.speaker === 'agent' ? 0 : 4,
-                        mr: entry.speaker === 'agent' ? 4 : 0,
+                        ml: isAgentSpeaker(entry.speaker) ? 0 : 4,
+                        mr: isAgentSpeaker(entry.speaker) ? 4 : 0,
                       }}
                       elevation={1}
                     >
@@ -483,14 +500,14 @@ const TranscriptModal = ({ open, onClose, session }) => {
                               width: 32, 
                               height: 32, 
                               mr: 1,
-                              bgcolor: entry.speaker === 'agent' ? 'primary.main' : 'secondary.main'
+                              bgcolor: isAgentSpeaker(entry.speaker) ? 'primary.main' : 'secondary.main'
                             }}
                           >
-                            {entry.speaker === 'agent' ? <Support /> : <Person />}
+                            {isAgentSpeaker(entry.speaker) ? <Support /> : <Person />}
                           </Avatar>
                           <Box sx={{ flex: 1 }}>
                             <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
-                              {entry.speaker === 'agent' ? 'Agent' : 'Client'}
+                              {getSpeakerDisplayName(entry.speaker)}
                             </Typography>
                             <Typography variant="caption" color="text.secondary">
                               Turn {entry.turn || index + 1}

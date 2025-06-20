@@ -29,94 +29,78 @@ def get_batch_processor():
 
 @batch_bp.route('/batches', methods=['POST'])
 def launch_batch():
-    """Launch a new batch simulation job"""
+    """Launch a new batch of conversation simulations"""
     try:
-        # Validate request
-        if not request.is_json:
-            raise BadRequest("Request must be JSON")
-        
         data = request.get_json()
-        scenarios = data.get('scenarios', [])
         
-        if not scenarios:
-            raise BadRequest("No scenarios provided")
+        if not data or 'scenarios' not in data:
+            return jsonify({'error': 'Missing scenarios in request body'}), 400
         
-        if not isinstance(scenarios, list):
-            raise BadRequest("Scenarios must be a list")
+        scenarios = data['scenarios']
+        if not isinstance(scenarios, list) or len(scenarios) == 0:
+            return jsonify({'error': 'Scenarios must be a non-empty list'}), 400
         
-        # Validate scenarios
-        for i, scenario in enumerate(scenarios):
-            if not isinstance(scenario, dict):
-                raise BadRequest(f"Scenario {i} must be an object")
-            
-            if 'name' not in scenario:
-                raise BadRequest(f"Scenario {i} missing 'name' field")
-            
-            if 'variables' not in scenario:
-                raise BadRequest(f"Scenario {i} missing 'variables' field")
+        # Optional parameters with defaults
+        prompt_version = data.get('prompt_version', 'v1.0')
+        prompt_spec_name = data.get('prompt_spec_name', 'default_prompts')
+        use_tools = data.get('use_tools', True)
         
-        # Create batch job
+        # Validate prompt_spec_name
+        if not isinstance(prompt_spec_name, str) or not prompt_spec_name.strip():
+            return jsonify({'error': 'prompt_spec_name must be a non-empty string'}), 400
+        
+        # Log the incoming request
+        logger.log_info(f"Launching batch with {len(scenarios)} scenarios", extra_data={
+            'total_scenarios': len(scenarios),
+            'prompt_version': prompt_version,
+            'prompt_spec_name': prompt_spec_name,
+            'use_tools': use_tools
+        })
+        
+        # Get or create batch processor instance
         processor = get_batch_processor()
         
-        # Add prompt_version and use_tools to the batch data
-        prompt_version = data.get('prompt_version', 'v1.0')
-        use_tools = data.get('use_tools', True)
-        batch_id = processor.create_batch_job(scenarios, prompt_version, use_tools)
+        # Create batch job
+        batch_id = processor.create_batch_job(
+            scenarios=scenarios, 
+            prompt_version=prompt_version,
+            prompt_spec_name=prompt_spec_name,
+            use_tools=use_tools
+        )
         
         # Start batch processing in background
         def run_batch_async():
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
+            """Run batch in background thread"""
             try:
-                # Define progress callback to update batch status
-                async def progress_callback(batch_id: str, completed_count: int):
-                    # Progress is handled within BatchProcessor._update_progress
-                    # This callback can be used for additional logging if needed
-                    logger.log_info(f"Batch {batch_id} progress: {completed_count} scenarios completed")
-                
-                result = loop.run_until_complete(processor.run_batch(batch_id, progress_callback))
-                
-                # Save results when batch completes
-                if result.get('status') == 'completed':
-                    results = result.get('results', [])
-                    
-                    # Save in both formats
-                    result_storage.save_batch_results_ndjson(batch_id, results)
-                    result_storage.save_batch_results_csv(batch_id, results)
-                    
-                    # Generate and save summary
-                    summary = result_storage.generate_summary_report(batch_id, results)
-                    result_storage.save_summary_report(summary)
-                    
-                    logger.log_info(f"Batch {batch_id} completed and results saved")
-                
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                result = loop.run_until_complete(processor.run_batch(batch_id))
+                logger.log_info(f"Background batch completed", extra_data={
+                    'batch_id': batch_id,
+                    'result_status': result.get('status', 'unknown')
+                })
             except Exception as e:
-                logger.log_error(f"Background batch processing failed", exception=e, extra_data={'batch_id': batch_id})
+                logger.log_error(f"Background batch failed", exception=e, extra_data={'batch_id': batch_id})
             finally:
                 loop.close()
         
         # Start background thread
         import threading
-        thread = threading.Thread(target=run_batch_async)
-        thread.daemon = True
+        thread = threading.Thread(target=run_batch_async, daemon=True)
         thread.start()
-        
-        logger.log_info(f"Launched batch job", extra_data={
-            'batch_id': batch_id,
-            'scenario_count': len(scenarios)
-        })
         
         return jsonify({
             'batch_id': batch_id,
             'status': 'launched',
-            'total_scenarios': len(scenarios)
-        }), 201
+            'total_scenarios': len(scenarios),
+            'prompt_version': prompt_version,
+            'prompt_spec_name': prompt_spec_name,
+            'use_tools': use_tools
+        }), 200
         
-    except BadRequest as e:
-        return jsonify({'error': str(e)}), 400
     except Exception as e:
         logger.log_error("Failed to launch batch", exception=e)
-        return jsonify({'error': 'Internal server error'}), 500
+        return jsonify({'error': f'Failed to launch batch: {str(e)}'}), 500
 
 @batch_bp.route('/batches/<batch_id>', methods=['GET'])
 def get_batch_status(batch_id: str):

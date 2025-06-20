@@ -33,6 +33,7 @@ class BatchJob:
     status: BatchStatus
     created_at: datetime
     prompt_version: str = "v1.0"
+    prompt_spec_name: str = "default_prompts"
     use_tools: bool = True
     started_at: Optional[datetime] = None
     completed_at: Optional[datetime] = None
@@ -62,8 +63,8 @@ class BatchProcessor:
         
         # Initialize components
         self.openai_wrapper = OpenAIWrapper(openai_api_key)
-        self.conversation_engine = ConversationEngine(self.openai_wrapper)
-        self.evaluator = ConversationEvaluator(self.openai_wrapper)
+        self.conversation_engine = None
+        self.evaluator = None
         
         # Initialize persistent storage
         self.persistent_storage = PersistentBatchStorage()
@@ -122,6 +123,7 @@ class BatchProcessor:
                     status=BatchStatus(batch_data['status']),
                     created_at=batch_data['created_at'],
                     prompt_version=batch_data.get('prompt_version', 'v1.0'),
+                    prompt_spec_name=batch_data.get('prompt_spec_name', 'default_prompts'),
                     use_tools=batch_data.get('use_tools', True),
                     started_at=batch_data.get('started_at'),
                     completed_at=batch_data.get('completed_at'),
@@ -153,6 +155,7 @@ class BatchProcessor:
                 'status': batch_job.status.value,  # Convert enum to string
                 'created_at': batch_job.created_at,
                 'prompt_version': batch_job.prompt_version,
+                'prompt_spec_name': batch_job.prompt_spec_name,
                 'use_tools': batch_job.use_tools,
                 'started_at': batch_job.started_at,
                 'completed_at': batch_job.completed_at,
@@ -169,7 +172,8 @@ class BatchProcessor:
         except Exception as e:
             self.logger.log_error(f"Failed to save batch to storage", exception=e, extra_data={'batch_id': batch_job.batch_id})
     
-    def create_batch_job(self, scenarios: List[Dict[str, Any]], prompt_version: str = "v1.0", use_tools: bool = True) -> str:
+    def create_batch_job(self, scenarios: List[Dict[str, Any]], prompt_version: str = "v1.0", 
+                        use_tools: bool = True, prompt_spec_name: str = "default_prompts") -> str:
         """Create a new batch job"""
         batch_id = str(uuid.uuid4())
         
@@ -179,6 +183,7 @@ class BatchProcessor:
             status=BatchStatus.PENDING,
             created_at=datetime.now(),
             prompt_version=prompt_version,
+            prompt_spec_name=prompt_spec_name,
             use_tools=use_tools,
             total_scenarios=len(scenarios)
         )
@@ -190,7 +195,8 @@ class BatchProcessor:
         
         self.logger.log_info(f"Created batch job", extra_data={
             'batch_id': batch_id,
-            'total_scenarios': len(scenarios)
+            'total_scenarios': len(scenarios),
+            'prompt_spec_name': prompt_spec_name
         })
         
         return batch_id
@@ -205,6 +211,7 @@ class BatchProcessor:
             'batch_id': batch_id,
             'status': job.status.value,
             'prompt_version': job.prompt_version,
+            'prompt_spec_name': job.prompt_spec_name,
             'use_tools': job.use_tools,
             'progress': job.progress_percentage,
             'total_scenarios': job.total_scenarios,
@@ -237,6 +244,15 @@ class BatchProcessor:
         if job.status != BatchStatus.PENDING:
             raise ValueError(f"Batch job {batch_id} is not in pending status")
         
+        # Initialize conversation engine and evaluator with the specific prompt specification
+        from src.conversation_engine import ConversationEngine
+        from src.evaluator import ConversationEvaluator
+        
+        self.conversation_engine = ConversationEngine(self.openai_wrapper, job.prompt_spec_name)
+        self.evaluator = ConversationEvaluator(self.openai_wrapper, job.prompt_spec_name)
+        
+        self.logger.log_info(f"Initialized conversation engine and evaluator with prompt spec: {job.prompt_spec_name}")
+        
         # Update job status
         job.status = BatchStatus.RUNNING
         job.started_at = datetime.now()
@@ -252,7 +268,8 @@ class BatchProcessor:
         self.logger.log_info(f"Starting batch processing", extra_data={
             'batch_id': batch_id,
             'total_scenarios': job.total_scenarios,
-            'concurrency': self.concurrency
+            'concurrency': self.concurrency,
+            'prompt_spec_name': job.prompt_spec_name
         })
         
         try:

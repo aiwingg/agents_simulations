@@ -1,0 +1,16 @@
+[{
+    "name": "calm_reorder",
+    "variables": {
+      "PERSONALITY": "спокойный",
+      "AMB_LEVEL": 0,
+      "PATIENCE": 2,
+      "ORDER_GOAL": "[{\"name\":\"филе\", \"qty\":2, \"from_history\":true}]",
+      "CURRENT_DATE": "2025-06-11 Wednesday",
+      "client_id": "201157649",
+      "SEED": 12345,
+      "LOCATION": "болгарский переулок",
+      "DELIVERY_DAY": "15 июня 2025",
+      "CLIENT_NAME": "Абдрашитова Ирина Евгеньевна ИП Болгарский пер, дом № 11, стр. 2 Б"
+    }
+  }
+]

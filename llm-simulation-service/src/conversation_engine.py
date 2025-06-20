@@ -11,29 +11,31 @@ from src.openai_wrapper import OpenAIWrapper
 from src.webhook_manager import WebhookManager
 from src.tool_emulator import ToolEmulator
 from src.logging_utils import get_logger
+from src.prompt_specification import PromptSpecificationManager, SystemPromptSpecification
+from src.tools_specification import ToolsSpecification
 
 class ConversationEngine:
-    """Core engine for managing conversations between Agent-LLM and Client-LLM"""
+    """Core engine for managing conversations between Agent-LLM and Client-LLM with multi-agent support"""
     
-    def __init__(self, openai_wrapper: OpenAIWrapper):
+    def __init__(self, openai_wrapper: OpenAIWrapper, prompt_spec_name: str = "default_prompts"):
         self.openai = openai_wrapper
         self.webhook_manager = WebhookManager()
         self.tool_emulator = ToolEmulator()
         self.logger = get_logger()
         
-        # Load prompt templates
-        self.agent_prompt = self._load_prompt_template("agent_system")
-        self.client_prompt = self._load_prompt_template("client_system")
-    
-    def _load_prompt_template(self, prompt_name: str) -> str:
-        """Load prompt template from file"""
-        try:
-            prompt_path = Config.get_prompt_path(prompt_name)
-            with open(prompt_path, 'r', encoding='utf-8') as f:
-                return f.read()
-        except Exception as e:
-            self.logger.log_error(f"Failed to load prompt template: {prompt_name}", exception=e)
-            return f"You are a {prompt_name.replace('_', ' ')}."
+        # Load prompt specification
+        self.prompt_manager = PromptSpecificationManager()
+        self.prompt_specification = self.prompt_manager.load_specification(prompt_spec_name)
+        
+        # Multi-agent state tracking
+        self.current_agent = 'agent'  # Default starting agent
+        self.agent_contexts = {}  # Track conversation context for each agent
+        
+        self.logger.log_info(f"ConversationEngine initialized with prompt specification: {prompt_spec_name}", extra_data={
+            'spec_name': prompt_spec_name,
+            'spec_version': self.prompt_specification.version,
+            'agents': list(self.prompt_specification.agents.keys())
+        })
     
     def _format_prompt(self, template: str, variables: Dict[str, Any], session_id: str) -> str:
         """Format prompt template with variables"""
@@ -130,7 +132,7 @@ class ConversationEngine:
                 variables['name'] = variables['NAME']
                 
         return variables, webhook_session_id
-    
+
     async def run_conversation(self, scenario: Dict[str, Any], max_turns: Optional[int] = None, timeout_sec: Optional[int] = None) -> Dict[str, Any]:
         """Run a complete conversation simulation"""
         
@@ -164,9 +166,17 @@ class ConversationEngine:
         start_time = time.time()
         
         try:
+            # Get prompts from specification
+            agent_spec = self.prompt_specification.get_agent_prompt('agent')
+            client_spec = self.prompt_specification.get_agent_prompt('client')
+            
+            if not agent_spec or not client_spec:
+                raise ValueError("Missing required agent or client specifications")
+            
             # Format system prompts
-            agent_system_prompt = self._format_prompt(self.agent_prompt, variables, session_id)
-            client_system_prompt = self._format_prompt(self.client_prompt, variables, session_id)
+            agent_system_prompt = self._format_prompt(agent_spec.prompt, variables, session_id)
+            client_system_prompt = self._format_prompt(client_spec.prompt, variables, session_id)
+            
             self.logger.log_info(f"Agent system prompt: {agent_system_prompt}")
             self.logger.log_info(f"Client system prompt: {client_system_prompt}")
             
@@ -320,180 +330,11 @@ class ConversationEngine:
                 'duration_seconds': time.time() - start_time,
                 'error_context': error_context
             }
-    
-    def _get_agent_tools_schema(self) -> List[Dict[str, Any]]:
-        """Get tools schema for agent (all available tools)"""
-        return [
-            {
-                "type": "function",
-                "function": {
-                    "name": "rag_find_products",
-                    "description": "Найти товары соответствующие описанию",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {
-                            "message": {
-                                "title": "Message",
-                                "type": "string",
-                                "description": "Описание товаров для поиска. Описание может содержать\n- Специфичного производителя, например \"ООО Золотой Бык\"\n- Термическое состояние (охлажденное, замороженное, и тд)\n- Способ упаковки (пакет, поштучно, и тд)\n- Животное (курица, говядина, и тд)\n- Объект (курица, грудка, и тд)\n- Дополнительные указания, например \"в маринаде\"\n\nПример описания: \"курица замороженная, в маринаде, 100 кг, упаковка по 1 кг\"\n"
-                            },
-                            "execution_message": {
-                                "type": "string",
-                                "description": "The message you will say to user when calling this tool. Make sure it fits into the conversation smoothly. Do not use a question. Use everyday language."
-                            }
-                        },
-                        "required": ["message", "execution_message"]
-                    }
-                }
-            },
-            {
-                "type": "function",
-                "function": {
-                    "name": "remove_from_cart",
-                    "description": "Вызывается только, когда известен товар, который необходо удалить! Для удаления товара из корзины. Принимает код товара.",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {
-                            "items": {
-                                "description": "Функция принимает список строк, где каждая строка должна быть равна коду продукта, который можно получить из инструмента rag_find_products\n",
-                                "title": "Items",
-                                "type": "array",
-                                "items": {
-                                    "type": "string"
-                                }
-                            },
-                            "execution_message": {
-                                "type": "string",
-                                "description": "The message you will say to user when calling this tool. Make sure it fits into the conversation smoothly. Do not use a question. Use everyday language."
-                            }
-                        },
-                        "required": ["items", "execution_message"]
-                    }
-                }
-            },
-            {
-                "type": "function",
-                "function": {
-                    "name": "set_current_location",
-                    "description": "Устанавливает адрес, на который оформляется заказ",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {
-                            "location_id": {
-                                "type": "integer",
-                                "description": "Номер адреса, на который необходимо оформить заказ. Можно выбрать из списка доступных адресов. По умолчанию используется адрес с индексом 1."
-                            },
-                            "execution_message": {
-                                "type": "string",
-                                "description": "The message you will say to user when calling this tool. Make sure it fits into the conversation smoothly. Do not use a question. Use everyday language."
-                            }
-                        },
-                        "required": ["location_id", "execution_message"]
-                    }
-                }
-            },
-            {
-                "type": "function",
-                "function": {
-                    "name": "get_cart",
-                    "description": "Для получения всех товаров из карзины.",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {
-                            "execution_message": {
-                                "type": "string",
-                                "description": "The message you will say to user when calling this tool. Make sure it fits into the conversation smoothly. Do not use a question. Use everyday language."
-                            }
-                        },
-                        "required": ["execution_message"]
-                    }
-                }
-            },
-            {
-                "type": "function",
-                "function": {
-                    "name": "change_delivery_date",
-                    "description": "Изменяет дату доставки",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {
-                            "delivery_date": {
-                                "type": "string",
-                                "description": "Дата доставки в формате YYYY-MM-DD"
-                            },
-                            "execution_message": {
-                                "type": "string",
-                                "description": "The message you will say to user when calling this tool. Make sure it fits into the conversation smoothly. Do not use a question. Use everyday language."
-                            }
-                        },
-                        "required": ["delivery_date", "execution_message"]
-                    }
-                }
-            },
-            {
-                "type": "function",
-                "function": {
-                    "name": "add_to_cart",
-                    "description": "Вызывается только, когда известен товар, который необходо добавить! Для сохранения товара в корзину, когда пользователь точно уверен в своем выборе. Принимает код товара и кол-во, и номер способа упаковки в случае наличия нескольких вариантов",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {
-                            "items": {
-                                "description": "Список продуктов с количеством. Каждый элемент содержит:\n- код продукта (можно получить через инструмент rag_find_products)\n- количество продукта (в штуках, кг и т.д.)",
-                                "type": "array",
-                                "title": "Items",
-                                "items": {
-                                    "type": "object",
-                                    "properties": {
-                                        "product_code": {
-                                            "type": "string",
-                                            "description": "Код продукта из rag_find_products"
-                                        },
-                                        "quantity": {
-                                            "type": "number",
-                                            "description": "Количество продукта (шт, кг и т.п.)"
-                                        },
-                                        "packaging_type": {
-                                            "type": "integer",
-                                            "description": "Номер способа упаковки (опционально в случае нескольких способов)"
-                                        }
-                                    },
-                                    "required": ["product_code", "quantity"]
-                                }
-                            },
-                            "execution_message": {
-                                "type": "string",
-                                "description": "The message you will say to user when calling this tool. Make sure it fits into the conversation smoothly. Do not use a question. Use everyday language."
-                            }
-                        },
-                        "required": ["items", "execution_message"]
-                    }
-                }
-            }
-        ]
-    
-    def _get_client_tools_schema(self) -> List[Dict[str, Any]]:
-        """Get tools schema for client (only end_call)"""
-        return [
-            {
-                "type": "function",
-                "function": {
-                    "name": "end_call",
-                    "description": "End the conversation/call when satisfied or done",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {
-                            "reason": {"type": "string", "description": "Reason for ending the call"}
-                        },
-                        "required": ["reason"]
-                    }
-                }
-            }
-        ]
-    
-    async def _handle_tool_calls(self, tool_calls: List[Dict[str, Any]], session_id: str) -> List[Dict[str, Any]]:
-        """Handle tool calls and return tool responses"""
+
+    async def _handle_tool_calls(self, tool_calls: List[Dict[str, Any]], session_id: str) -> Tuple[List[Dict[str, Any]], Optional[str]]:
+        """Handle tool calls and return tool responses and optionally new current agent"""
         tool_responses = []
+        new_current_agent = None
         
         for tool_call in tool_calls:
             tool_name = tool_call["function"]["name"]
@@ -502,48 +343,89 @@ class ConversationEngine:
                 # Parse arguments
                 arguments = json.loads(tool_call["function"]["arguments"])
                 
-                # Filter out execution_message field before sending to tool API
-                # This field is used internally for conversation flow but shouldn't be sent to external APIs
-                filtered_arguments = {k: v for k, v in arguments.items() if k != "execution_message"}
-                
-                # Handle end_call specially
-                if tool_name == "end_call":
-                    tool_response = {
-                        "tool_call_id": tool_call["id"],
-                        "role": "tool",
-                        "content": json.dumps({
-                            "status": "call_ended",
-                            "reason": filtered_arguments.get("reason", "conversation completed")
+                # Check if this is a handoff tool
+                if ToolsSpecification.is_handoff_tool(tool_name):
+                    target_agent = ToolsSpecification.get_handoff_target_agent(tool_name)
+                    
+                    if target_agent and target_agent in self.prompt_specification.agents:
+                        new_current_agent = target_agent
+                        
+                        tool_response = {
+                            "tool_call_id": tool_call["id"],
+                            "role": "tool",
+                            "content": json.dumps({
+                                "status": "handoff_completed",
+                                "target_agent": target_agent,
+                                "message": f"Successfully handed off conversation to {target_agent}"
+                            })
+                        }
+                        
+                        self.logger.log_info(f"Agent handoff executed: {self.current_agent} -> {target_agent}", extra_data={
+                            'session_id': session_id,
+                            'from_agent': self.current_agent,
+                            'to_agent': target_agent,
+                            'tool_name': tool_name
                         })
-                    }
+                    else:
+                        tool_response = {
+                            "tool_call_id": tool_call["id"],
+                            "role": "tool",
+                            "content": json.dumps({
+                                "error": f"Invalid handoff target: {target_agent}"
+                            })
+                        }
+                        
+                        self.logger.log_error(f"Invalid handoff target: {target_agent}", extra_data={
+                            'session_id': session_id,
+                            'tool_name': tool_name
+                        })
                 else:
-                    # Call the tool emulator with filtered arguments
-                    result = await self.tool_emulator.call_tool(tool_name, filtered_arguments, session_id)
-                    tool_response = {
-                        "tool_call_id": tool_call["id"],
-                        "role": "tool",
-                        "content": json.dumps(result)
-                    }
+                    # Filter out execution_message field before sending to tool API
+                    # This field is used internally for conversation flow but shouldn't be sent to external APIs
+                    filtered_arguments = {k: v for k, v in arguments.items() if k != "execution_message"}
+                    
+                    # Handle end_call specially
+                    if tool_name == "end_call":
+                        tool_response = {
+                            "tool_call_id": tool_call["id"],
+                            "role": "tool",
+                            "content": json.dumps({
+                                "status": "call_ended",
+                                "reason": filtered_arguments.get("reason", "conversation completed")
+                            })
+                        }
+                    else:
+                        # Call the tool emulator with filtered arguments
+                        result = await self.tool_emulator.call_tool(tool_name, filtered_arguments, session_id)
+                        tool_response = {
+                            "tool_call_id": tool_call["id"],
+                            "role": "tool",
+                            "content": json.dumps(result)
+                        }
                 
                 tool_responses.append(tool_response)
                 
                 # Log tool usage (with original arguments for debugging, but filtered for tool call)
                 self.logger.log_info(f"Tool executed: {tool_name}", extra_data={
                     'session_id': session_id,
+                    'current_agent': self.current_agent,
                     'original_arguments': arguments,
-                    'filtered_arguments': filtered_arguments,
+                    'filtered_arguments': arguments if ToolsSpecification.is_handoff_tool(tool_name) else filtered_arguments,
                     'result': tool_response["content"]
                 })
                 
             except Exception as e:
-                self.logger.log_error(f"Tool call failed: {tool_name}", exception=e, extra_data={'session_id': session_id})
+                self.logger.log_error(f"Tool call failed: {tool_name}", exception=e, extra_data={
+                    'session_id': session_id,
+                    'current_agent': self.current_agent
+                })
                 tool_responses.append({
                     "tool_call_id": tool_call["id"],
                     "role": "tool",
                     "content": json.dumps({"error": f"Tool execution failed: {str(e)}"})
                 })
         
-        return tool_responses
+        return tool_responses, new_current_agent
     
     def _safe_parse_tool_result(self, content: str) -> Any:
         """Safely parse tool result content, returning original string if JSON parsing fails"""
@@ -585,9 +467,17 @@ class ConversationEngine:
         start_time = time.time()
         
         try:
+            # Get prompts and tools from specification
+            agent_spec = self.prompt_specification.get_agent_prompt('agent')
+            client_spec = self.prompt_specification.get_agent_prompt('client')
+            
+            if not agent_spec or not client_spec:
+                raise ValueError("Missing required agent or client specifications")
+            
             # Format system prompts
-            agent_system_prompt = self._format_prompt(self.agent_prompt, variables, session_id)
-            client_system_prompt = self._format_prompt(self.client_prompt, variables, session_id)
+            agent_system_prompt = self._format_prompt(agent_spec.prompt, variables, session_id)
+            client_system_prompt = self._format_prompt(client_spec.prompt, variables, session_id)
+            
             self.logger.log_info(f"Agent system prompt: {agent_system_prompt}")
             self.logger.log_info(f"Client system prompt: {client_system_prompt}")
             
@@ -595,9 +485,9 @@ class ConversationEngine:
             agent_messages = [{"role": "system", "content": agent_system_prompt}]
             client_messages = [{"role": "system", "content": client_system_prompt}]
             
-            # Get tools schemas
-            agent_tools = self._get_agent_tools_schema()
-            client_tools = self._get_client_tools_schema()
+            # Get tools schemas from specification
+            agent_tools = agent_spec.get_tool_schemas()
+            client_tools = client_spec.get_tool_schemas()
             
             # Start conversation with client greeting
             # client_messages.append({"role": "assistant", "content": "Добрый день!"})
@@ -657,12 +547,76 @@ class ConversationEngine:
                     })
                     
                     # Process tool calls
-                    tool_responses = await self._handle_tool_calls(tool_calls, session_id)
+                    tool_responses, new_current_agent = await self._handle_tool_calls(tool_calls, session_id)
                     
-                    # Add tool responses to agent messages
-                    agent_messages.extend(tool_responses)
+                    # Handle agent handoff if needed
+                    if new_current_agent and new_current_agent != self.current_agent:
+                        self.logger.log_info(f"Switching active agent from {self.current_agent} to {new_current_agent}", extra_data={
+                            'session_id': session_id,
+                            'turn_number': turn_number,
+                            'previous_agent': self.current_agent,
+                            'new_agent': new_current_agent
+                        })
+                        
+                        # IMPORTANT: Always add tool responses first to avoid OpenAI error
+                        agent_messages.extend(tool_responses)
+                        
+                        # Save current agent context (including tool responses)
+                        self.agent_contexts[self.current_agent] = agent_messages.copy()
+                        
+                        # Switch to new agent
+                        self.current_agent = new_current_agent
+                        
+                        # Initialize new agent context if not exists
+                        if new_current_agent not in self.agent_contexts:
+                            new_agent_spec = self.prompt_specification.get_agent_prompt(new_current_agent)
+                            if new_agent_spec:
+                                new_agent_system_prompt = self._format_prompt(new_agent_spec.prompt, variables, session_id)
+                                self.agent_contexts[new_current_agent] = [{"role": "system", "content": new_agent_system_prompt}]
+                        
+                        # Use new agent's context
+                        agent_messages = self.agent_contexts[new_current_agent].copy()
+                        
+                        # Update tools for new agent
+                        new_agent_spec = self.prompt_specification.get_agent_prompt(new_current_agent)
+                        if new_agent_spec:
+                            agent_tools = new_agent_spec.get_tool_schemas()
+                        
+                        # Add conversation history to new agent context
+                        # Add the client's last message to provide context
+                        if conversation_history:
+                            last_client_message = None
+                            for entry in reversed(conversation_history):
+                                if entry['speaker'] == 'client':
+                                    last_client_message = entry['content']
+                                    break
+                            
+                            if last_client_message:
+                                agent_messages.append({"role": "user", "content": last_client_message})
+                        
+                        # For handoff, add a user message explaining the handoff to the new agent
+                        handoff_message = f"You are now taking over this conversation. The previous agent has transferred the customer to you."
+                        if conversation_history:
+                            # Add context about what has happened so far
+                            context_summary = "Previous conversation context: "
+                            for entry in conversation_history[-3:]:  # Last 3 turns for context
+                                context_summary += f"{entry['speaker']}: {entry['content'][:100]}... "
+                            handoff_message += f" {context_summary}"
+                        
+                        agent_messages.append({"role": "user", "content": handoff_message})
+                    else:
+                        # Add tool responses to agent messages (normal flow, no handoff)
+                        agent_messages.extend(tool_responses)
                     
                     # Get agent response after tool calls
+                    # Debug: Log the message structure before sending to OpenAI
+                    self.logger.log_info(f"About to make second OpenAI call with messages", extra_data={
+                        'session_id': session_id,
+                        'message_count': len(agent_messages),
+                        'last_3_messages': agent_messages[-3:] if len(agent_messages) >= 3 else agent_messages,
+                        'handoff_occurred': new_current_agent is not None
+                    })
+                    
                     agent_final_response, agent_usage_2 = await self.openai.chat_completion(
                         messages=agent_messages,
                         session_id=session_id,
@@ -679,7 +633,7 @@ class ConversationEngine:
                     self.logger.log_conversation_turn(
                         session_id=session_id,
                         turn_number=turn_number,
-                        role="agent",
+                        role=f"agent_{self.current_agent}",
                         content=agent_content,
                         tool_calls=tool_calls,
                         tool_results=[self._safe_parse_tool_result(response["content"]) for response in tool_responses]
@@ -688,7 +642,7 @@ class ConversationEngine:
                     # Add tool calls and results to conversation history
                     conversation_history.append({
                         "turn": turn_number,
-                        "speaker": "agent",
+                        "speaker": f"agent_{self.current_agent}",
                         "content": agent_content,
                         "tool_calls": tool_calls,
                         "tool_results": [self._safe_parse_tool_result(response["content"]) for response in tool_responses],
@@ -704,13 +658,13 @@ class ConversationEngine:
                     self.logger.log_conversation_turn(
                         session_id=session_id,
                         turn_number=turn_number,
-                        role="agent",
+                        role=f"agent_{self.current_agent}",
                         content=agent_content
                     )
                     
                     conversation_history.append({
                         "turn": turn_number,
-                        "speaker": "agent",
+                        "speaker": f"agent_{self.current_agent}",
                         "content": agent_content,
                         "timestamp": datetime.now().isoformat()
                     })
@@ -779,6 +733,7 @@ class ConversationEngine:
                     break
                 
                 client_content = client_response.content if hasattr(client_response, 'content') else str(client_response)
+                
                 # Ensure client_content is never null or empty
                 if not client_content:
                     client_content = ""

@@ -87,6 +87,76 @@ export const listBatches = async () => {
   return handleResponse(response);
 };
 
+// Prompt Specification Management
+
+// List all prompt specifications
+export const listPromptSpecs = async () => {
+  const response = await fetch(`${API_BASE_URL}/api/prompt-specs`);
+  return handleResponse(response);
+};
+
+// Get prompt specification contents
+export const getPromptSpec = async (specName) => {
+  const response = await fetch(`${API_BASE_URL}/api/prompt-specs/${encodeURIComponent(specName)}`);
+  return handleResponse(response);
+};
+
+// Create new prompt specification
+export const createPromptSpec = async (specName, data) => {
+  const response = await fetch(`${API_BASE_URL}/api/prompt-specs/${encodeURIComponent(specName)}`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(data),
+  });
+  return handleResponse(response);
+};
+
+// Update existing prompt specification
+export const updatePromptSpec = async (specName, data) => {
+  const response = await fetch(`${API_BASE_URL}/api/prompt-specs/${encodeURIComponent(specName)}`, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(data),
+  });
+  return handleResponse(response);
+};
+
+// Delete prompt specification
+export const deletePromptSpec = async (specName) => {
+  const response = await fetch(`${API_BASE_URL}/api/prompt-specs/${encodeURIComponent(specName)}`, {
+    method: 'DELETE',
+  });
+  return handleResponse(response);
+};
+
+// Validate prompt specification
+export const validatePromptSpec = async (specName, data) => {
+  const response = await fetch(`${API_BASE_URL}/api/prompt-specs/${encodeURIComponent(specName)}/validate`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(data),
+  });
+  return handleResponse(response);
+};
+
+// Duplicate prompt specification
+export const duplicatePromptSpec = async (sourceSpecName, data) => {
+  const response = await fetch(`${API_BASE_URL}/api/prompt-specs/${encodeURIComponent(sourceSpecName)}/duplicate`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(data),
+  });
+  return handleResponse(response);
+};
+
 // WebSocket connection for real-time updates
 export class BatchWebSocket {
   constructor(batchId, onUpdate, onError) {
@@ -192,6 +262,13 @@ export default {
   getBatchSummary,
   getBatchCost,
   listBatches,
+  listPromptSpecs,
+  getPromptSpec,
+  createPromptSpec,
+  updatePromptSpec,
+  deletePromptSpec,
+  validatePromptSpec,
+  duplicatePromptSpec,
   BatchWebSocket,
   BatchPoller,
 };

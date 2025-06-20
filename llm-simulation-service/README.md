@@ -1,17 +1,18 @@
 # LLM Simulation & Evaluation Service
 
-A comprehensive service for simulating and evaluating conversations between Agent-LLM and Client-LLM systems, designed for QA teams and prompt engineers to test and optimize conversational AI systems at scale.
+A comprehensive service for simulating and evaluating conversations between Agent-LLM and Client-LLM systems, with support for multi-agent conversations and handoffs, designed for QA teams and prompt engineers to test and optimize conversational AI systems at scale.
 
 ## Overview
 
-This service enables reproducible, highly-parallel simulation of phone-order conversations between an Agent-LLM (sales bot) and Client-LLM (scripted customer), followed by automated evaluation using an Evaluator-LLM that provides 3-point scoring and detailed feedback.
+This service enables reproducible, highly-parallel simulation of phone-order conversations between multiple Agent-LLMs (sales bot, support specialist, etc.) and Client-LLM (scripted customer), followed by automated evaluation using an Evaluator-LLM that provides 3-point scoring and detailed feedback.
 
 ### Key Features
 
+- **Multi-Agent Conversations**: Support for multiple agents with seamless handoffs during conversation
 - **Scalable Batch Processing**: Run thousands of conversations in parallel with configurable concurrency
 - **Deterministic Testing**: Same seed + same prompt set = identical scores for reproducible results
 - **Multiple Interfaces**: Both REST API and CLI for different use cases
-- **Comprehensive Evaluation**: Automated scoring with detailed comments in Russian
+- **Comprehensive Evaluation**: Automated scoring with detailed comments in Russian, including multi-agent coordination assessment
 - **Cost Tracking**: Token usage monitoring and cost estimation
 - **Multiple Export Formats**: Results available in JSON, CSV, and NDJSON formats
 - **Real-time Monitoring**: Progress tracking and status monitoring for batch jobs
@@ -20,12 +21,106 @@ This service enables reproducible, highly-parallel simulation of phone-order con
 
 The service consists of several key components:
 
-- **Conversation Engine**: Orchestrates conversations between Agent and Client LLMs
-- **Evaluator System**: Scores conversations on a 1-3 scale with detailed feedback
+- **Conversation Engine**: Orchestrates conversations between Agent and Client LLMs with multi-agent support
+- **Multi-Agent Manager**: Handles agent switching and context management during handoffs
+- **Evaluator System**: Scores conversations on a 1-3 scale with detailed feedback, including multi-agent coordination
 - **Batch Processor**: Manages parallel execution of multiple scenarios
 - **Result Storage**: Handles export and reporting in multiple formats
 - **REST API**: Provides HTTP endpoints for batch management
 - **CLI Interface**: Command-line tools for local execution and API interaction
+
+## Multi-Agent Functionality
+
+### Overview
+
+The service supports complex multi-agent conversations where different specialized agents can handle specific parts of a conversation. For example, a sales agent can handle initial order processing, then hand off to a support specialist for technical issues, and back to the sales agent to complete the order.
+
+### Agent Handoffs
+
+Agent handoffs are implemented through dynamically generated tools:
+
+1. **Handoff Definition**: Each agent can define which other agents it can hand off to in the prompt specification file
+2. **Dynamic Tool Generation**: The system automatically creates `handoff_{target_agent}` tools based on the handoffs configuration
+3. **Context Management**: When a handoff occurs, the system maintains conversation context and transfers it to the new agent
+4. **Seamless Transitions**: The conversation continues naturally with the new agent taking over
+
+### Configuration
+
+#### Handoffs in Prompt Specifications
+
+Handoffs are configured in the agent specification using the `handoffs` field:
+
+```json
+{
+  "agents": {
+    "agent": {
+      "name": "Sales Agent",
+      "prompt": "...",
+      "tools": ["rag_find_products", "add_to_cart", "handoff_support"],
+      "handoffs": {
+        "support": "Transfer to support specialist for technical assistance"
+      }
+    },
+    "support": {
+      "name": "Support Specialist", 
+      "prompt": "...",
+      "tools": ["rag_find_products", "handoff_agent"],
+      "handoffs": {
+        "agent": "Transfer back to sales agent after resolving technical issues"
+      }
+    }
+  }
+}
+```
+
+#### Generated Handoff Tools
+
+Based on the handoffs configuration, the system automatically generates tools:
+
+- `handoff_support`: Created for the main agent to transfer to support
+- `handoff_agent`: Created for the support agent to transfer back to the main agent
+
+These tools have no parameters and execute immediately when called.
+
+### Multi-Agent Conversation Flow
+
+1. **Conversation Start**: Begins with the default agent (usually 'agent')
+2. **Normal Operation**: The active agent processes client requests using its available tools
+3. **Handoff Trigger**: When the active agent calls a handoff tool (e.g., `handoff_support`)
+4. **Context Transfer**: The system:
+   - Saves the current agent's conversation context
+   - Switches to the target agent
+   - Initializes the new agent with its system prompt
+   - Provides conversation history for context
+5. **Continued Conversation**: The new agent takes over and can use its tools
+6. **Return Handoff**: The process can repeat with handoffs back to previous agents
+
+### Example Multi-Agent Scenario
+
+```
+Client: "Hello, I need to place an order but I'm having trouble with your website"
+
+Sales Agent (Anna): "Hello! I can help with the order. Let me transfer you to our support specialist for the website issue first."
+[Calls handoff_support]
+
+Support Agent (Dmitri): "Hi, I'm Dmitri from technical support. I understand you're having website issues. Can you tell me what specific problem you're experiencing?"
+
+Client: [Describes technical issue]
+
+Support Agent: "I've resolved that issue. Let me transfer you back to Anna to complete your order."
+[Calls handoff_agent]
+
+Sales Agent (Anna): "Thank you for waiting! Now let's proceed with your order. What would you like to order today?"
+```
+
+### Multi-Agent Evaluation
+
+The evaluator has been enhanced to assess multi-agent coordination:
+
+- **Handoff Appropriateness**: Were handoffs triggered at the right times?
+- **Context Continuity**: Did agents maintain conversation context across handoffs?
+- **Task Completion**: Was the overall business goal achieved despite agent switches?
+- **Smooth Transitions**: Were handoffs executed smoothly without confusing the client?
 
 ## Quick Start
 
@@ -71,6 +166,27 @@ python simulate.py run scenarios/sample_scenarios.json --single 0
 python simulate.py run scenarios/sample_scenarios.json
 ```
 
+**Manage prompt specifications:**
+```bash
+# List all prompt specifications
+python simulate.py prompts list
+
+# Get specification contents
+python simulate.py prompts get default_prompts --output my_spec.json
+
+# Create new specification from file
+python simulate.py prompts create my_custom_spec --from-file my_spec.json
+
+# Duplicate existing specification
+python simulate.py prompts duplicate default_prompts my_copy --display-name "My Copy" --version "1.1.0"
+
+# Validate specification file
+python simulate.py prompts validate my_spec.json
+
+# Delete specification
+python simulate.py prompts delete my_custom_spec --force
+```
+
 #### REST API
 
 **Start the service:**
@@ -100,6 +216,89 @@ curl -X POST http://localhost:5000/api/batches \
 | `DEBUG` | `True` | Enable debug mode |
 | `HOST` | `0.0.0.0` | Server host address |
 | `PORT` | `5000` | Server port |
+
+### Prompt Specifications
+
+The service uses a flexible prompt specification system that allows you to define different prompts and tools for each agent in the conversation. Prompts are defined in JSON files located in the `prompts/` directory.
+
+#### Default Prompt Specification
+
+The service comes with a default prompt specification file `prompts/default_prompts.json` that contains the standard agent, client, and evaluator prompts converted from the original txt files.
+
+#### Custom Prompt Specifications
+
+You can create custom prompt specification files to test different prompts, tool configurations, or conversation scenarios.
+
+**Prompt Specification Format:**
+
+```json
+{
+  "name": "My Custom Prompts",
+  "version": "1.0.0",
+  "description": "Custom prompt configuration for testing",
+  "agents": {
+    "agent": {
+      "name": "Sales Agent",
+      "prompt": "Your agent system prompt here...",
+      "tools": [
+        "rag_find_products",
+        "add_to_cart",
+        "remove_from_cart",
+        "get_cart",
+        "change_delivery_date",
+        "set_current_location",
+        "call_transfer"
+      ],
+      "description": "Friendly sales manager"
+    },
+    "client": {
+      "name": "Customer",
+      "prompt": "Your client system prompt here...",
+      "tools": ["end_call"],
+      "description": "Customer calling to place an order"
+    },
+    "evaluator": {
+      "name": "Conversation Evaluator",
+      "prompt": "Your evaluator system prompt here...",
+      "tools": [],
+      "description": "Expert evaluator of conversation quality"
+    }
+  }
+}
+```
+
+**Available Tools:**
+
+- **Agent Tools:**
+  - `rag_find_products` - Search for products in database
+  - `add_to_cart` - Add products to shopping cart
+  - `remove_from_cart` - Remove products from cart
+  - `get_cart` - View current cart contents
+  - `change_delivery_date` - Modify delivery date
+  - `set_current_location` - Set delivery address
+  - `call_transfer` - Transfer call to human operator
+
+- **Client Tools:**
+  - `end_call` - End the conversation
+
+**Using Custom Prompt Specifications:**
+
+1. **Create your JSON file** in the `prompts/` directory (e.g., `prompts/my_custom_prompts.json`)
+
+2. **Via REST API:**
+   ```bash
+   curl -X POST http://localhost:5000/api/batches \
+     -H "Content-Type: application/json" \
+     -d '{
+       "scenarios": [...],
+       "prompt_spec_name": "my_custom_prompts"
+     }'
+   ```
+
+3. **Via CLI:**
+   ```bash
+   python simulate.py run scenarios/sample_scenarios.json --prompt-spec my_custom_prompts
+   ```
 
 ### Scenario Format
 
@@ -210,16 +409,27 @@ Content-Type: application/json
         "CURRENT_DATE": "2025-06-08 Sunday"
       }
     }
-  ]
+  ],
+  "prompt_spec_name": "default_prompts",
+  "prompt_version": "v1.0",
+  "use_tools": true
 }
 ```
+
+**Optional Parameters:**
+- `prompt_spec_name` (string): Name of the prompt specification file to use (default: "default_prompts")
+- `prompt_version` (string): Version identifier for tracking (default: "v1.0")
+- `use_tools` (boolean): Whether to enable tool calling (default: true)
 
 **Response:**
 ```json
 {
   "batch_id": "uuid-string",
   "status": "launched",
-  "total_scenarios": 1
+  "total_scenarios": 1,
+  "prompt_spec_name": "default_prompts",
+  "prompt_version": "v1.0",
+  "use_tools": true
 }
 ```
 
@@ -237,6 +447,9 @@ GET /batches/{batch_id}
   "total_scenarios": 10,
   "completed_scenarios": 10,
   "failed_scenarios": 0,
+  "prompt_spec_name": "default_prompts",
+  "prompt_version": "v1.0",
+  "use_tools": true,
   "created_at": "2025-06-08T10:00:00",
   "started_at": "2025-06-08T10:00:01",
   "completed_at": "2025-06-08T10:05:30"
@@ -304,287 +517,330 @@ GET /batches/{batch_id}/cost
 ```json
 {
   "batch_id": "uuid-string",
-  "total_cost_usd": 2.45,
-  "total_tokens": 15420,
-  "total_requests": 48,
-  "average_cost_per_request": 0.051
+  "estimated_cost_usd": 0.45,
+  "tokens_used": {
+    "input_tokens": 15000,
+    "output_tokens": 8000,
+    "total_tokens": 23000
+  },
+  "model": "gpt-4o-mini"
 }
 ```
 
-#### List All Batches
+### Prompt Specification Management
+
+The service provides comprehensive API endpoints for managing prompt specifications, allowing you to programmatically create, read, update, and delete conversation prompts and agent configurations.
+
+#### List All Prompt Specifications
 ```http
-GET /batches
+GET /prompt-specs
 ```
 
 **Response:**
 ```json
 {
-  "batches": [
+  "specifications": [
     {
-      "batch_id": "uuid-string",
-      "status": "completed",
-      "total_scenarios": 10,
-      "created_at": "2025-06-08T10:00:00"
+      "name": "default_prompts",
+      "display_name": "Default LLM Simulation Prompts",
+      "version": "1.0.0",
+      "description": "Default prompt configuration converted from original txt files with multi-agent support",
+      "agents": ["agent", "support", "client", "evaluator"],
+      "file_size": 12345,
+      "last_modified": 1625097600.0
+    },
+    {
+      "name": "custom_prompts",
+      "display_name": "My Custom Prompts",
+      "version": "2.1.0",
+      "description": "Custom prompt configuration for testing",
+      "agents": ["agent", "client", "evaluator"],
+      "file_size": 8976,
+      "last_modified": 1625184000.0
     }
   ],
-  "total_count": 1
+  "total_count": 2
 }
 ```
 
-## CLI Reference
+#### Get Prompt Specification Contents
+```http
+GET /prompt-specs/{spec_name}
+```
 
-### Commands
+**Response:**
+```json
+{
+  "name": "My Custom Prompts",
+  "version": "1.0.0",
+  "description": "Custom prompt configuration for testing",
+  "agents": {
+    "agent": {
+      "name": "Sales Agent",
+      "prompt": "Your agent system prompt here...",
+      "tools": [
+        "rag_find_products",
+        "add_to_cart",
+        "remove_from_cart",
+        "get_cart",
+        "change_delivery_date",
+        "set_current_location",
+        "call_transfer"
+      ],
+      "description": "Friendly sales manager",
+      "handoffs": {
+        "support": "Transfer to support specialist for technical assistance"
+      }
+    },
+    "client": {
+      "name": "Customer",
+      "prompt": "Your client system prompt here...",
+      "tools": ["end_call"],
+      "description": "Customer calling to place an order"
+    },
+    "evaluator": {
+      "name": "Conversation Evaluator",
+      "prompt": "Your evaluator system prompt here...",
+      "tools": [],
+      "description": "Expert evaluator of conversation quality"
+    }
+  }
+}
+```
 
-#### Run Scenarios
+#### Create New Prompt Specification
+```http
+POST /prompt-specs/{spec_name}
+Content-Type: application/json
+```
+
+**Request Body:**
+```json
+{
+  "name": "My New Prompts",
+  "version": "1.0.0",
+  "description": "New prompt configuration for specialized testing",
+  "agents": {
+    "agent": {
+      "name": "Specialized Sales Agent",
+      "prompt": "You are a specialized sales agent...",
+      "tools": ["rag_find_products", "add_to_cart"],
+      "description": "Specialized agent for specific products"
+    },
+    "client": {
+      "name": "Customer",
+      "prompt": "You are a demanding customer...",
+      "tools": ["end_call"],
+      "description": "Customer with specific requirements"
+    },
+    "evaluator": {
+      "name": "Strict Evaluator",
+      "prompt": "You are a strict evaluator...",
+      "tools": [],
+      "description": "Evaluator with high standards"
+    }
+  }
+}
+```
+
+**Response:**
+```json
+{
+  "message": "Prompt specification created successfully",
+  "specification_name": "my_new_prompts",
+  "action": "created"
+}
+```
+
+#### Update Existing Prompt Specification
+```http
+PUT /prompt-specs/{spec_name}
+Content-Type: application/json
+```
+
+Uses the same request body format as the create endpoint.
+
+**Response:**
+```json
+{
+  "message": "Prompt specification updated successfully",
+  "specification_name": "my_new_prompts"
+}
+```
+
+#### Delete Prompt Specification
+```http
+DELETE /prompt-specs/{spec_name}
+```
+
+**Response:**
+```json
+{
+  "message": "Prompt specification deleted successfully",
+  "specification_name": "my_new_prompts"
+}
+```
+
+**Note:** The default prompt specification (`default_prompts`) cannot be deleted and will return a 403 error.
+
+#### Validate Prompt Specification
+```http
+POST /prompt-specs/{spec_name}/validate
+Content-Type: application/json
+```
+
+Validates a prompt specification without saving it. Uses the same request body format as the create endpoint.
+
+**Response:**
+```json
+{
+  "valid": true,
+  "issues": [],
+  "specification_name": "test_spec",
+  "agents": ["agent", "client", "evaluator"]
+}
+```
+
+**Response (Invalid):**
+```json
+{
+  "valid": false,
+  "issues": [
+    "Missing required agent: evaluator",
+    "Agent 'agent' references unknown tool: invalid_tool"
+  ],
+  "specification_name": "test_spec",
+  "agents": ["agent", "client"]
+}
+```
+
+#### Duplicate Prompt Specification
+```http
+POST /prompt-specs/{spec_name}/duplicate
+Content-Type: application/json
+```
+
+**Request Body:**
+```json
+{
+  "new_name": "my_duplicated_spec",
+  "display_name": "My Duplicated Specification",
+  "version": "1.0.0",
+  "description": "Duplicated from original specification"
+}
+```
+
+**Response:**
+```json
+{
+  "message": "Prompt specification duplicated successfully",
+  "source_name": "default_prompts",
+  "new_name": "my_duplicated_spec"
+}
+```
+
+### Error Responses
+
+All prompt specification endpoints return consistent error responses:
+
+**400 Bad Request:**
+```json
+{
+  "error": "Validation error: Missing required agent: evaluator"
+}
+```
+
+**403 Forbidden:**
+```json
+{
+  "error": "Cannot delete the default prompt specification"
+}
+```
+
+**404 Not Found:**
+```json
+{
+  "error": "Prompt specification not found: non_existent_spec"
+}
+```
+
+**409 Conflict:**
+```json
+{
+  "error": "Target specification already exists: duplicate_name"
+}
+```
+
+**500 Internal Server Error:**
+```json
+{
+  "error": "Failed to save specification: disk full"
+}
+```
+
+## Advanced Usage
+
+### Programmatic Prompt Management
+
+You can now programmatically manage prompt specifications using the API:
+
+**Example: Creating a custom specification programmatically**
 ```bash
-python simulate.py run <scenarios_file> [options]
+# Create a new specification
+curl -X POST http://localhost:5000/api/prompt-specs/my_custom_spec \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Custom Sales Prompts",
+    "version": "1.0.0",
+    "description": "Optimized prompts for electronics sales",
+    "agents": {
+      "agent": {
+        "name": "Electronics Sales Agent",
+        "prompt": "You are an expert electronics sales agent...",
+        "tools": ["rag_find_products", "add_to_cart", "get_cart"],
+        "description": "Specialized electronics sales agent"
+      },
+      "client": {
+        "name": "Tech Customer",
+        "prompt": "You are a tech-savvy customer...",
+        "tools": ["end_call"],
+        "description": "Customer interested in electronics"
+      },
+      "evaluator": {
+        "name": "Electronics Evaluator",
+        "prompt": "Evaluate electronics sales conversations...",
+        "tools": [],
+        "description": "Specialized evaluator for electronics sales"
+      }
+    }
+  }'
+
+# Use the new specification in a batch
+curl -X POST http://localhost:5000/api/batches \
+  -H "Content-Type: application/json" \
+  -d '{
+    "scenarios": [...],
+    "prompt_spec_name": "my_custom_spec"
+  }'
 ```
 
-**Options:**
-- `--output-dir DIR`: Specify output directory for results
-- `--single INDEX`: Run only the scenario at the specified index
-- `--no-stream`: Disable real-time output for single scenarios
-
-**Examples:**
+**Example: Duplicating and modifying specifications**
 ```bash
-# Run all scenarios in batch mode
-python simulate.py run scenarios/sample_scenarios.json
+# Duplicate the default specification
+curl -X POST http://localhost:5000/api/prompt-specs/default_prompts/duplicate \
+  -H "Content-Type: application/json" \
+  -d '{
+    "new_name": "modified_default",
+    "display_name": "Modified Default Prompts",
+    "version": "1.1.0",
+    "description": "Modified version of default prompts"
+  }'
 
-# Run single scenario with streaming
-python simulate.py run scenarios/sample_scenarios.json --single 0
+# Retrieve and modify the duplicated specification
+curl -X GET http://localhost:5000/api/prompt-specs/modified_default
 
-# Run batch with custom output directory
-python simulate.py run scenarios/sample_scenarios.json --output-dir ./my_results
+# Update with your changes
+curl -X PUT http://localhost:5000/api/prompt-specs/modified_default \
+  -H "Content-Type: application/json" \
+  -d '{...modified specification data...}'
 ```
-
-#### Check Batch Status
-```bash
-python simulate.py status <batch_id> [options]
-```
-
-**Options:**
-- `--api-url URL`: API base URL (default: http://localhost:5000)
-
-**Example:**
-```bash
-python simulate.py status 12345678-1234-1234-1234-123456789abc
-```
-
-#### Fetch Results
-```bash
-python simulate.py fetch <batch_id> [options]
-```
-
-**Options:**
-- `--output FILE`: Output file path
-- `--format FORMAT`: Output format (json, csv, ndjson)
-- `--api-url URL`: API base URL
-
-**Examples:**
-```bash
-# Fetch as JSON to stdout
-python simulate.py fetch 12345678-1234-1234-1234-123456789abc
-
-# Save as CSV file
-python simulate.py fetch 12345678-1234-1234-1234-123456789abc --format csv --output results.csv
-
-# Fetch NDJSON format
-python simulate.py fetch 12345678-1234-1234-1234-123456789abc --format ndjson --output results.ndjson
-```
-
-### Result Analysis
-
-#### Summarize Results
-```bash
-python summarise_results.py <results_file> [options]
-```
-
-**Options:**
-- `--format FORMAT`: Output format for summary (csv, json)
-- `--output FILE`: Save summary to file
-- `--histogram FILE`: Generate score distribution histogram
-- `--quiet`: Suppress console output
-
-**Examples:**
-```bash
-# Display summary statistics
-python summarise_results.py results/batch_12345_20250608_120000.ndjson
-
-# Generate summary with histogram
-python summarise_results.py results/batch_12345_20250608_120000.csv --histogram score_dist.png
-
-# Save summary as JSON
-python summarise_results.py results/batch_12345_20250608_120000.ndjson --format json --output summary.json
-```
-
-## Deployment
-
-### Docker Deployment
-
-1. **Build Docker Image**
-   ```bash
-   docker build -t llm-simulation-service .
-   ```
-
-2. **Run Container**
-   ```bash
-   docker run -d \
-     --name llm-sim-service \
-     -p 5000:5000 \
-     -e OPENAI_API_KEY=your_api_key_here \
-     -e CONCURRENCY=8 \
-     -v $(pwd)/results:/app/results \
-     -v $(pwd)/logs:/app/logs \
-     llm-simulation-service
-   ```
-
-3. **Check Health**
-   ```bash
-   curl http://localhost:5000/api/health
-   ```
-
-### Production Considerations
-
-#### Performance Tuning
-
-- **Concurrency**: Adjust `CONCURRENCY` based on your OpenAI rate limits and server capacity
-- **Timeout**: Increase `TIMEOUT_SEC` for complex scenarios that may take longer
-- **Model Selection**: Use `gpt-4o-mini` for cost efficiency or `gpt-4o` for higher quality
-
-#### Monitoring
-
-- **Logs**: Monitor application logs in the `logs/` directory
-- **Health Endpoint**: Use `/api/health` for health checks
-- **Cost Tracking**: Review token usage logs for cost monitoring
-
-#### Security
-
-- **API Key**: Never commit API keys to version control
-- **Network**: Consider running behind a reverse proxy in production
-- **Rate Limiting**: Implement rate limiting if exposing the API publicly
-
-## Troubleshooting
-
-### Common Issues
-
-#### OpenAI API Errors
-
-**Rate Limit Exceeded (429)**
-- Reduce `CONCURRENCY` setting
-- The service automatically retries with exponential backoff
-
-**Invalid API Key**
-- Verify `OPENAI_API_KEY` environment variable is set correctly
-- Check API key permissions and billing status
-
-#### Memory Issues
-
-**Out of Memory**
-- Reduce `CONCURRENCY` to lower memory usage
-- Process smaller batches
-- Increase available system memory
-
-#### Conversation Timeouts
-
-**Frequent Timeouts**
-- Increase `TIMEOUT_SEC` setting
-- Check network connectivity to OpenAI
-- Simplify scenario complexity
-
-### Debug Mode
-
-Enable debug mode for detailed logging:
-```bash
-export DEBUG=True
-python src/main.py
-```
-
-### Log Analysis
-
-Check different log files for specific issues:
-- `logs/app_*.log`: General application logs
-- `logs/error_*.log`: Error-specific logs
-- `logs/tokens_*.log`: Token usage and cost tracking
-- `logs/conversations_*.jsonl`: Detailed conversation logs
-
-## Performance Benchmarks
-
-### Expected Performance
-
-Based on testing with `gpt-4o-mini`:
-
-| Metric | Value |
-|--------|-------|
-| Conversations per minute | 60-120 (concurrency=4) |
-| Average conversation duration | 30-60 seconds |
-| Average tokens per conversation | 800-1500 |
-| Cost per conversation | $0.02-0.05 |
-
-### Scaling Guidelines
-
-- **Small batches (1-50 scenarios)**: Default settings work well
-- **Medium batches (50-500 scenarios)**: Increase concurrency to 8-16
-- **Large batches (500+ scenarios)**: Consider distributed deployment
-
-## Contributing
-
-### Development Setup
-
-1. **Install Development Dependencies**
-   ```bash
-   pip install -r requirements.txt
-   pip install pytest black flake8
-   ```
-
-2. **Run Tests**
-   ```bash
-   python test_validation.py
-   ```
-
-3. **Code Formatting**
-   ```bash
-   black src/ *.py
-   flake8 src/ *.py
-   ```
-
-### Project Structure
-
-```
-llm-simulation-service/
-├── src/                    # Main application code
-│   ├── config.py          # Configuration management
-│   ├── main.py            # Flask application entry point
-│   ├── openai_wrapper.py  # OpenAI API integration
-│   ├── conversation_engine.py  # Core conversation logic
-│   ├── evaluator.py       # Conversation evaluation
-│   ├── batch_processor.py # Batch processing system
-│   ├── result_storage.py  # Result storage and export
-│   └── routes/            # API route handlers
-├── prompts/               # LLM prompt templates
-├── scenarios/             # Sample scenario files
-├── logs/                  # Application logs
-├── results/               # Generated results
-├── simulate.py            # CLI interface
-├── summarise_results.py   # Result analysis tool
-├── test_validation.py     # Validation tests
-├── Dockerfile             # Docker configuration
-├── requirements.txt       # Python dependencies
-└── README.md             # This documentation
-```
-
-## License
-
-MIT License - see LICENSE file for details.
-
-## Support
-
-For issues and questions:
-1. Check the troubleshooting section above
-2. Review application logs for error details
-3. Ensure all dependencies are correctly installed
-4. Verify OpenAI API key and billing status
-
----
-
-*Built with ❤️ by the Manus AI team*
-

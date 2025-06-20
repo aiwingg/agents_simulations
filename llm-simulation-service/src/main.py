@@ -7,6 +7,7 @@ from flask import Flask, jsonify
 from flask_cors import CORS
 from src.config import Config
 from src.routes.batch_routes import batch_bp
+from src.routes.prompt_spec_routes import prompt_spec_bp
 
 # Create Flask app
 app = Flask(__name__)
@@ -17,6 +18,7 @@ CORS(app, origins="*")
 
 # Register blueprints
 app.register_blueprint(batch_bp, url_prefix='/api')
+app.register_blueprint(prompt_spec_bp, url_prefix='/api')
 
 @app.route('/')
 def index():
@@ -32,7 +34,14 @@ def index():
             'get_batch_results': 'GET /api/batches/{batch_id}/results',
             'get_batch_summary': 'GET /api/batches/{batch_id}/summary',
             'get_batch_cost': 'GET /api/batches/{batch_id}/cost',
-            'list_batches': 'GET /api/batches'
+            'list_batches': 'GET /api/batches',
+            'list_prompt_specs': 'GET /api/prompt-specs',
+            'get_prompt_spec': 'GET /api/prompt-specs/{spec_name}',
+            'create_prompt_spec': 'POST /api/prompt-specs/{spec_name}',
+            'update_prompt_spec': 'PUT /api/prompt-specs/{spec_name}',
+            'delete_prompt_spec': 'DELETE /api/prompt-specs/{spec_name}',
+            'validate_prompt_spec': 'POST /api/prompt-specs/{spec_name}/validate',
+            'duplicate_prompt_spec': 'POST /api/prompt-specs/{spec_name}/duplicate'
         },
         'documentation': 'See README.md for detailed API documentation'
     })
