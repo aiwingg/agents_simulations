@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "description": "Multi-agent configuration using file references for prompts",
   "agents": {
-    "entry_point": {
+    "agent": {
       "name": "Entry Point",
       "prompt": "file:entry_point_system.txt",
       "tools": [
@@ -17,7 +17,7 @@
     },
     "flow_manager": {
       "name": "Flow Manager",
-      "prompt": "file:flow_manager_system.txt",
+      "prompt": "file:flow_manager.txt",
       "tools": [
         "add_to_cart",
         "remove_from_cart",
