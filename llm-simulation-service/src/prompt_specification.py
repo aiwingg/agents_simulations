@@ -40,9 +40,34 @@ class AgentPromptSpecification:
         return {k: v for k, v in result.items() if v is not None}
     
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> 'AgentPromptSpecification':
-        """Create instance from dictionary"""
-        return cls(**data)
+    def from_dict(cls, data: Dict[str, Any], prompts_dir: str = None) -> 'AgentPromptSpecification':
+        """Create instance from dictionary, resolving file references if needed"""
+        # Create a copy to avoid modifying the original data
+        data_copy = data.copy()
+        
+        # Resolve file reference in prompt if present
+        if prompts_dir and 'prompt' in data_copy:
+            data_copy['prompt'] = cls._resolve_file_reference(data_copy['prompt'], prompts_dir)
+        
+        return cls(**data_copy)
+    
+    @staticmethod
+    def _resolve_file_reference(prompt: str, prompts_dir: str) -> str:
+        """Resolve file reference in prompt string"""
+        if isinstance(prompt, str) and prompt.startswith('file:'):
+            filename = prompt[5:]  # Remove 'file:' prefix
+            filepath = os.path.join(prompts_dir, filename)
+            
+            if os.path.exists(filepath):
+                try:
+                    with open(filepath, 'r', encoding='utf-8') as f:
+                        return f.read().strip()
+                except Exception as e:
+                    return f"[ERROR: Could not read {filename}: {str(e)}]"
+            else:
+                return f"[ERROR: File not found: {filename}]"
+        
+        return prompt
 
 @dataclass
 class SystemPromptSpecification:
@@ -73,10 +98,10 @@ class SystemPromptSpecification:
         }
     
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> 'SystemPromptSpecification':
-        """Create instance from dictionary"""
+    def from_dict(cls, data: Dict[str, Any], prompts_dir: str = None) -> 'SystemPromptSpecification':
+        """Create instance from dictionary, resolving file references if needed"""
         agents = {
-            name: AgentPromptSpecification.from_dict(agent_data) 
+            name: AgentPromptSpecification.from_dict(agent_data, prompts_dir) 
             for name, agent_data in data['agents'].items()
         }
         
@@ -103,7 +128,9 @@ class SystemPromptSpecification:
         with open(filepath, 'r', encoding='utf-8') as f:
             data = json.load(f)
         
-        return cls.from_dict(data)
+        # Pass the prompts directory for file reference resolution
+        prompts_dir = os.path.dirname(filepath)
+        return cls.from_dict(data, prompts_dir)
 
 class PromptSpecificationManager:
     """Manager for loading and handling prompt specifications"""
@@ -159,7 +186,7 @@ class PromptSpecificationManager:
         """Save provided data as a new JSON specification"""
         try:
             # Validate the specification data
-            specification = SystemPromptSpecification.from_dict(spec_data)
+            specification = SystemPromptSpecification.from_dict(spec_data, self.prompts_dir)
             
             # Validate the specification
             issues = self.validate_specification(specification)

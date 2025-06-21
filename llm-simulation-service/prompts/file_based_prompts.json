@@ -1,0 +1,69 @@
+{
+  "name": "File-based Multi-Agent System",
+  "version": "1.0.0",
+  "description": "Multi-agent configuration using file references for prompts",
+  "agents": {
+    "entry_point": {
+      "name": "Entry Point",
+      "prompt": "file:entry_point_system.txt",
+      "tools": [
+        "change_delivery_date",
+        "set_current_location"
+      ],
+      "description": "Entry point for the conversation",
+      "handoffs": {
+        "flow_manager": "Transfer the conversation to a flow manager once you have all the information you need"
+      }
+    },
+    "flow_manager": {
+      "name": "Flow Manager",
+      "prompt": "file:flow_manager_system.txt",
+      "tools": [
+        "add_to_cart",
+        "remove_from_cart",
+        "get_cart",
+        "change_delivery_date",
+        "set_current_location"
+      ],
+      "description": "Flow manager for the conversation",
+      "handoffs": {
+        "nomenclature_lookup": "Transfer the conversation to nomenclature lookup if client shows intent to add products to the cart",
+        "confirmation": "Transfer the conversation to confirmation if client added products to the cart and you made attempt to upsell"
+      }
+    },
+    "nomenclature_lookup": {
+      "name": "Nomenclature Lookup",
+      "prompt": "file:nomenclature_lookup_system.txt",
+      "tools": [
+        "rag_find_products"
+      ],
+      "description": "Nomenclature lookup for the conversation",
+      "handoffs": {
+        "flow_manager": "Transfer the conversation to a flow manager once you have all the information you need"
+      }
+    },
+    "confirmation": {
+      "name": "Confirmation",
+      "prompt": "file:confirmation_system.txt",
+      "tools": [],
+      "description": "Confirmation for the conversation",
+      "handoffs": {
+        "flow_manager": "Transfer the conversation to a flow manager if client want to change something in the order, with reason to do so"
+      }
+    },
+    "client": {
+      "name": "Customer",
+      "prompt": "file:client_system.txt",
+      "tools": [
+        "end_call"
+      ],
+      "description": "Customer calling to place an order"
+    },
+    "evaluator": {
+      "name": "Conversation Evaluator",
+      "prompt": "file:evaluator_system.txt",
+      "tools": [],
+      "description": "Expert evaluator of conversation quality with multi-agent support"
+    }
+  }
+}
