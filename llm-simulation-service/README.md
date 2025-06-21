@@ -221,6 +221,32 @@ curl -X POST http://localhost:5000/api/batches \
 
 The service uses a flexible prompt specification system that allows you to define different prompts and tools for each agent in the conversation. Prompts are defined in JSON files located in the `prompts/` directory.
 
+#### File-Based Prompts
+
+For easier management of large prompts, you can store prompt content in separate text files and reference them in your JSON specifications:
+
+```json
+{
+  "agents": {
+    "agent": {
+      "name": "Sales Agent",
+      "prompt": "file:agent_system.txt",
+      "tools": ["rag_find_products", "add_to_cart"],
+      "handoffs": {
+        "support": "Transfer to support for technical help"
+      }
+    }
+  }
+}
+```
+
+The system automatically resolves `file:` references by loading content from the corresponding `.txt` files in the `prompts/` directory. This approach offers:
+
+- **Better organization**: Separate large prompts from JSON structure
+- **Easier editing**: Edit prompts in dedicated text files
+- **Version control**: Track prompt changes independently
+- **Reusability**: Share prompt files between specifications
+
 #### Default Prompt Specification
 
 The service comes with a default prompt specification file `prompts/default_prompts.json` that contains the standard agent, client, and evaluator prompts converted from the original txt files.
