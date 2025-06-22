@@ -14,16 +14,21 @@ class ToolsSpecification:
             "type": "function",
             "function": {
                 "name": "rag_find_products",
-                "description": "Search for products in the database using RAG (Retrieval-Augmented Generation)",
+                "description": "Найти товары соответствующие описанию",
                 "parameters": {
                     "type": "object",
                     "properties": {
                         "message": {
+                            "title": "Message",
                             "type": "string",
-                            "description": "The search query for products"
+                            "description": "Описание товаров для поиска. Описание может содержать\n- Специфичного производителя, например \"ООО Золотой Бык\"\n- Термическое состояние (охлажденное, замороженное, и тд)\n- Способ упаковки (пакет, поштучно, и тд)\n- Животное (курица, говядина, и тд)\n- Объект (курица, грудка, и тд)\n- Дополнительные указания, например \"в маринаде\"\n\nПример описания: \"курица замороженная, в маринаде, 100 кг, упаковка по 1 кг\"\n"
+                        },
+                        "execution_message": {
+                            "type": "string",
+                            "description": "The message you will say to user when calling this tool. Make sure it fits into the conversation smoothly. Do not use a question. Use everyday language."
                         }
                     },
-                    "required": ["message"]
+                    "required": ["message", "execution_message"]
                 }
             }
         },
@@ -31,25 +36,39 @@ class ToolsSpecification:
             "type": "function",
             "function": {
                 "name": "add_to_cart",
-                "description": "Add products to the shopping cart",
+                "description": "Вызывается только, когда известен товар, который необходо добавить! Для сохранения товара в корзину, когда пользователь точно уверен в своем выборе. Принимает код товара и кол-во, и номер способа упаковки в случае наличия нескольких вариантов",
                 "parameters": {
                     "type": "object",
                     "properties": {
-                        "products": {
+                        "items": {
+                            "description": "Список продуктов с количеством. Каждый элемент содержит:\n- код продукта (можно получить через инструмент rag_find_products)\n- количество продукта (в штуках, кг и т.д.)",
                             "type": "array",
+                            "title": "Items",
                             "items": {
                                 "type": "object",
                                 "properties": {
-                                    "product_code": {"type": "string"},
-                                    "quantity": {"type": "integer"},
-                                    "packaging_type": {"type": "integer", "description": "Optional packaging type number"}
+                                    "product_code": {
+                                        "type": "string",
+                                        "description": "Код продукта из rag_find_products"
+                                    },
+                                    "quantity": {
+                                        "type": "number",
+                                        "description": "Количество продукта (шт, кг и т.п.)"
+                                    },
+                                    "packaging_type": {
+                                        "type": "integer",
+                                        "description": "Номер способа упаковки (опционально в случае нескольких способов)"
+                                    }
                                 },
                                 "required": ["product_code", "quantity"]
-                            },
-                            "description": "List of products to add to cart"
+                            }
+                        },
+                        "execution_message": {
+                            "type": "string",
+                            "description": "The message you will say to user when calling this tool. Make sure it fits into the conversation smoothly. Do not use a question. Use everyday language."
                         }
                     },
-                    "required": ["products"]
+                    "required": ["items", "execution_message"]
                 }
             }
         },
@@ -57,16 +76,24 @@ class ToolsSpecification:
             "type": "function",
             "function": {
                 "name": "remove_from_cart",
-                "description": "Remove products from the shopping cart",
+                "description": "Вызывается только, когда известен товар, который необходо удалить! Для удаления товара из корзины. Принимает код товара.",
                 "parameters": {
                     "type": "object",
                     "properties": {
-                        "product_code": {
+                        "items": {
+                            "description": "Функция принимает список строк, где каждая строка должна быть равна коду продукта, который можно получить из инструмента rag_find_products\n",
+                            "title": "Items",
+                            "type": "array",
+                            "items": {
+                                "type": "string"
+                            }
+                        },
+                        "execution_message": {
                             "type": "string",
-                            "description": "The product code to remove from cart"
+                            "description": "The message you will say to user when calling this tool. Make sure it fits into the conversation smoothly. Do not use a question. Use everyday language."
                         }
                     },
-                    "required": ["product_code"]
+                    "required": ["items", "execution_message"]
                 }
             }
         },
@@ -74,10 +101,16 @@ class ToolsSpecification:
             "type": "function",
             "function": {
                 "name": "get_cart",
-                "description": "Get the current contents of the shopping cart",
+                "description": "Для получения всех товаров из карзины.",
                 "parameters": {
                     "type": "object",
-                    "properties": {}
+                    "properties": {
+                        "execution_message": {
+                            "type": "string",
+                            "description": "The message you will say to user when calling this tool. Make sure it fits into the conversation smoothly. Do not use a question. Use everyday language."
+                        }
+                    },
+                    "required": ["execution_message"]
                 }
             }
         },
@@ -85,16 +118,20 @@ class ToolsSpecification:
             "type": "function",
             "function": {
                 "name": "change_delivery_date",
-                "description": "Change the delivery date for the order",
+                "description": "Изменяет дату доставки",
                 "parameters": {
                     "type": "object",
                     "properties": {
                         "delivery_date": {
                             "type": "string",
-                            "description": "The new delivery date"
+                            "description": "Дата доставки в формате YYYY-MM-DD"
+                        },
+                        "execution_message": {
+                            "type": "string",
+                            "description": "The message you will say to user when calling this tool. Make sure it fits into the conversation smoothly. Do not use a question. Use everyday language."
                         }
                     },
-                    "required": ["delivery_date"]
+                    "required": ["delivery_date", "execution_message"]
                 }
             }
         },
@@ -102,16 +139,20 @@ class ToolsSpecification:
             "type": "function",
             "function": {
                 "name": "set_current_location",
-                "description": "Set the delivery location for the order",
+                "description": "Устанавливает адрес, на который оформляется заказ",
                 "parameters": {
                     "type": "object",
                     "properties": {
-                        "location": {
+                        "location_id": {
+                            "type": "integer",
+                            "description": "Номер адреса, на который необходимо оформить заказ. Можно выбрать из списка доступных адресов. По умолчанию используется адрес с индексом 1."
+                        },
+                        "execution_message": {
                             "type": "string",
-                            "description": "The delivery address"
+                            "description": "The message you will say to user when calling this tool. Make sure it fits into the conversation smoothly. Do not use a question. Use everyday language."
                         }
                     },
-                    "required": ["location"]
+                    "required": ["location_id", "execution_message"]
                 }
             }
         },
