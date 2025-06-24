@@ -244,11 +244,15 @@ class BatchProcessor:
         if job.status != BatchStatus.PENDING:
             raise ValueError(f"Batch job {batch_id} is not in pending status")
         
-        # Initialize conversation engine and evaluator with the specific prompt specification
-        from src.conversation_engine import ConversationEngine
+        # Initialize Autogen swarm engine and evaluator with the specific prompt specification
+        from src.autogen_swarm_engine import AutogenSwarmFactory
         from src.evaluator import ConversationEvaluator
         
-        self.conversation_engine = ConversationEngine(self.openai_wrapper, job.prompt_spec_name)
+        # Create isolated Autogen swarm instance for this batch
+        self.conversation_engine = AutogenSwarmFactory.create_swarm_engine(
+            self.openai_wrapper.api_key, 
+            job.prompt_spec_name
+        )
         self.evaluator = ConversationEvaluator(self.openai_wrapper, job.prompt_spec_name)
         
         self.logger.log_info(f"Initialized conversation engine and evaluator with prompt spec: {job.prompt_spec_name}")

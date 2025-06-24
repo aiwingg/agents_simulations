@@ -19,12 +19,12 @@ This service enables reproducible, highly-parallel simulation of phone-order con
 
 ## Architecture
 
-The service consists of several key components:
+The service is built on **Microsoft Autogen** for robust multi-agent conversation orchestration, consisting of several key components:
 
-- **Conversation Engine**: Orchestrates conversations between Agent and Client LLMs with multi-agent support
-- **Multi-Agent Manager**: Handles agent switching and context management during handoffs
+- **AutogenSwarmEngine**: Microsoft Autogen-based conversation orchestrator using Swarm pattern for multi-agent coordination
+- **AutogenToolFactory**: Session-isolated tool creation for concurrent conversation handling
 - **Evaluator System**: Scores conversations on a 1-3 scale with detailed feedback, including multi-agent coordination
-- **Batch Processor**: Manages parallel execution of multiple scenarios
+- **Batch Processor**: Manages parallel execution of multiple scenarios with per-batch MAS isolation
 - **Result Storage**: Handles export and reporting in multiple formats
 - **REST API**: Provides HTTP endpoints for batch management
 - **CLI Interface**: Command-line tools for local execution and API interaction
@@ -33,16 +33,16 @@ The service consists of several key components:
 
 ### Overview
 
-The service supports complex multi-agent conversations where different specialized agents can handle specific parts of a conversation. For example, a sales agent can handle initial order processing, then hand off to a support specialist for technical issues, and back to the sales agent to complete the order.
+The service supports complex multi-agent conversations using **Microsoft Autogen's Swarm pattern** where different specialized agents can handle specific parts of a conversation. For example, a sales agent can handle initial order processing, then hand off to a support specialist for technical issues, and back to the sales agent to complete the order.
 
 ### Agent Handoffs
 
-Agent handoffs are implemented through dynamically generated tools:
+Agent handoffs are implemented through Autogen's native handoff mechanism:
 
 1. **Handoff Definition**: Each agent can define which other agents it can hand off to in the prompt specification file
-2. **Dynamic Tool Generation**: The system automatically creates `handoff_{target_agent}` tools based on the handoffs configuration
-3. **Context Management**: When a handoff occurs, the system maintains conversation context and transfers it to the new agent
-4. **Seamless Transitions**: The conversation continues naturally with the new agent taking over
+2. **Autogen Integration**: The system uses Autogen's built-in `HandoffMessage` and agent handoff capabilities
+3. **Context Management**: Autogen automatically maintains conversation context and transfers it between agents
+4. **Seamless Transitions**: The conversation continues naturally with the new agent taking over using Autogen's Swarm orchestration
 
 ### Configuration
 
@@ -73,45 +73,59 @@ Handoffs are configured in the agent specification using the `handoffs` field:
 }
 ```
 
-#### Generated Handoff Tools
+#### Autogen Handoff Integration
 
-Based on the handoffs configuration, the system automatically generates tools:
+Based on the handoffs configuration, the system integrates with Autogen's native handoff mechanism:
 
-- `handoff_support`: Created for the main agent to transfer to support
-- `handoff_agent`: Created for the support agent to transfer back to the main agent
+- **Handoff Targets**: Each agent's `handoffs` configuration becomes the agent's available handoff targets in Autogen
+- **AssistantAgent Creation**: Agents are created as Autogen `AssistantAgent` instances with proper handoff configuration
+- **Swarm Orchestration**: The Autogen `Swarm` manages conversation flow and agent transitions automatically
 
-These tools have no parameters and execute immediately when called.
+### Multi-Agent Conversation Flow (Autogen-Powered)
 
-### Multi-Agent Conversation Flow
+1. **Swarm Initialization**: Autogen creates a `Swarm` with all configured `AssistantAgent` instances
+2. **Conversation Start**: Autogen begins with the first agent and processes the initial client message
+3. **Normal Operation**: The active agent processes client requests using session-isolated Tool instances
+4. **Handoff Trigger**: When an agent needs to transfer, it uses Autogen's native handoff mechanism
+5. **Autogen Context Transfer**: Autogen automatically:
+   - Maintains conversation history across agents
+   - Transfers control to the target agent
+   - Preserves message context and tool execution results
+6. **Continued Conversation**: The new agent takes over with full conversation context
+7. **Termination**: Conversation ends when Autogen's termination conditions are met
 
-1. **Conversation Start**: Begins with the default agent (usually 'agent')
-2. **Normal Operation**: The active agent processes client requests using its available tools
-3. **Handoff Trigger**: When the active agent calls a handoff tool (e.g., `handoff_support`)
-4. **Context Transfer**: The system:
-   - Saves the current agent's conversation context
-   - Switches to the target agent
-   - Initializes the new agent with its system prompt
-   - Provides conversation history for context
-5. **Continued Conversation**: The new agent takes over and can use its tools
-6. **Return Handoff**: The process can repeat with handoffs back to previous agents
-
-### Example Multi-Agent Scenario
+### Example Multi-Agent Scenario (Autogen Orchestrated)
 
 ```
 Client: "Hello, I need to place an order but I'm having trouble with your website"
 
 Sales Agent (Anna): "Hello! I can help with the order. Let me transfer you to our support specialist for the website issue first."
-[Calls handoff_support]
+[Autogen triggers handoff to support agent]
 
 Support Agent (Dmitri): "Hi, I'm Dmitri from technical support. I understand you're having website issues. Can you tell me what specific problem you're experiencing?"
 
 Client: [Describes technical issue]
 
 Support Agent: "I've resolved that issue. Let me transfer you back to Anna to complete your order."
-[Calls handoff_agent]
+[Autogen triggers handoff back to sales agent]
 
 Sales Agent (Anna): "Thank you for waiting! Now let's proceed with your order. What would you like to order today?"
 ```
+
+### Session Isolation & Concurrent Execution
+
+The Autogen-based architecture provides robust support for concurrent conversation handling:
+
+#### Per-Batch Isolation
+- **AutogenSwarmFactory**: Creates completely isolated Autogen swarm instances for each batch
+- **No Cross-Contamination**: Each batch execution runs in its own Autogen environment
+- **Concurrent Batches**: Multiple batches can run simultaneously without interference
+
+#### Session-Isolated Tools
+- **AutogenToolFactory**: Creates session-specific Tool instances that inherit from Autogen's `Tool` class
+- **Session Storage**: Each Tool instance stores its own `session_id` for proper context isolation
+- **No Global State**: Eliminates session bleed between concurrent conversations
+- **Tool Class Pattern**: Uses proper Autogen Tool subclassing instead of function-based tools
 
 ### Multi-Agent Evaluation
 
