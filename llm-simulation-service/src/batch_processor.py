@@ -12,8 +12,6 @@ from dataclasses import dataclass, asdict, field
 from enum import Enum
 from src.config import Config
 from src.openai_wrapper import OpenAIWrapper
-from src.conversation_engine import ConversationEngine
-from src.evaluator import ConversationEvaluator
 from src.logging_utils import get_logger
 from src.persistent_storage import PersistentBatchStorage
 
@@ -245,10 +243,10 @@ class BatchProcessor:
             raise ValueError(f"Batch job {batch_id} is not in pending status")
         
         # Initialize conversation engine and evaluator with the specific prompt specification
-        from src.conversation_engine import ConversationEngine
+        from src.autogen_conversation_engine import AutoGenConversationEngine
         from src.evaluator import ConversationEvaluator
         
-        self.conversation_engine = ConversationEngine(self.openai_wrapper, job.prompt_spec_name)
+        self.conversation_engine = AutoGenConversationEngine(self.openai_wrapper, job.prompt_spec_name)
         self.evaluator = ConversationEvaluator(self.openai_wrapper, job.prompt_spec_name)
         
         self.logger.log_info(f"Initialized conversation engine and evaluator with prompt spec: {job.prompt_spec_name}")
@@ -448,12 +446,23 @@ class BatchProcessor:
                 # Update progress: Scenario completed
                 await self._update_sub_progress(batch_id, scenario_index, "completed", progress_lock)
                 
+                # Get batch job
+                batch_job = self.persistent_storage.load_batch_metadata(batch_id)
+                if not batch_job:
+                    # This should not happen if called from run_batch
+                    return
+                
+                total_scenarios = len(batch_job.get('scenarios', []))
+
+                # Create a lock for progress updates if not provided
+                progress_lock = progress_lock or asyncio.Lock()
+                
                 # Update progress
                 if progress_callback:
-                    if asyncio.iscoroutinefunction(progress_callback):
-                        await progress_callback(batch_id, scenario_index + 1)
-                    else:
-                        progress_callback(batch_id, scenario_index + 1)
+                    progress_callback(scenario_index + 1, total_scenarios)
+                
+                # Update batch progress
+                await self._update_progress(batch_id, scenario_index + 1)
                 
                 # Update progress in batch job and save to storage (thread-safe)
                 if progress_lock:

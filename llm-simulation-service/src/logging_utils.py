@@ -8,6 +8,18 @@ from datetime import datetime
 from typing import Dict, Any, Optional
 from src.config import Config
 
+class TracebackFormatter(logging.Formatter):
+    """A custom formatter to include tracebacks in logs."""
+    def format(self, record):
+        # Call the original formatter
+        formatted = super().format(record)
+        # Add traceback if it exists
+        if record.exc_info:
+            # The formatException method returns a multi-line string
+            # which we can append to our formatted message
+            formatted += '\n' + self.formatException(record.exc_info)
+        return formatted
+
 class SimulationLogger:
     """Custom logger for simulation service"""
     
@@ -58,7 +70,7 @@ class SimulationLogger:
             os.path.join(Config.LOGS_DIR, f'error_{timestamp}{batch_suffix}.log'),
             encoding='utf-8'
         )
-        error_handler.setFormatter(logging.Formatter(
+        error_handler.setFormatter(TracebackFormatter(
             '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
         ))
         self.error_logger.addHandler(error_handler)

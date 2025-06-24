@@ -16,6 +16,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
 from src.config import Config
 from src.openai_wrapper import OpenAIWrapper
 from src.conversation_engine import ConversationEngine
+from src.autogen_conversation_engine import AutoGenConversationEngine
 from src.evaluator import ConversationEvaluator
 from src.batch_processor import BatchProcessor
 from src.result_storage import ResultStorage
@@ -34,7 +35,8 @@ async def run_single_scenario(scenario: Dict[str, Any], output_dir: str, stream:
     
     logger = get_logger()
     openai_wrapper = OpenAIWrapper(Config.OPENAI_API_KEY)
-    conversation_engine = ConversationEngine(openai_wrapper, prompt_spec_name)
+    # Use AutoGenConversationEngine instead of the original
+    conversation_engine = AutoGenConversationEngine(openai_wrapper, prompt_spec_name)
     evaluator = ConversationEvaluator(openai_wrapper, prompt_spec_name)
     
     scenario_name = scenario.get('name', 'unknown')
@@ -94,7 +96,7 @@ async def run_single_scenario(scenario: Dict[str, Any], output_dir: str, stream:
     }
     
     # Save results
-    result_storage = ResultStorage(output_dir)
+    result_storage = ResultStorage()
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     filename = f"single_{scenario_name}_{timestamp}.json"
     
@@ -142,7 +144,7 @@ async def run_batch_scenarios(scenarios: List[Dict[str, Any]], output_dir: str,
             
             # Save results
             results = result.get('results', [])
-            result_storage = ResultStorage(output_dir)
+            result_storage = ResultStorage()
             
             # Save in multiple formats
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -153,12 +155,10 @@ async def run_batch_scenarios(scenarios: List[Dict[str, Any]], output_dir: str,
             
             result_storage.save_batch_results_ndjson(batch_id, results)
             result_storage.save_batch_results_csv(batch_id, results)
-            result_storage.save_batch_results_json(batch_id, results)
             
             print(f"\n💾 Results saved:")
             print(f"  📄 NDJSON: {ndjson_file}")
             print(f"  📊 CSV: {csv_file}")
-            print(f"  📋 JSON: {json_file}")
             
             # Generate summary
             summary = result_storage.generate_summary_report(batch_id, results)
