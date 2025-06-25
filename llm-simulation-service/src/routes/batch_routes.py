@@ -44,6 +44,7 @@ def launch_batch():
         prompt_version = data.get('prompt_version', 'v1.0')
         prompt_spec_name = data.get('prompt_spec_name', 'default_prompts')
         use_tools = data.get('use_tools', True)
+        use_autogen = data.get('use_autogen', False)
         
         # Validate prompt_spec_name
         if not isinstance(prompt_spec_name, str) or not prompt_spec_name.strip():
@@ -54,7 +55,8 @@ def launch_batch():
             'total_scenarios': len(scenarios),
             'prompt_version': prompt_version,
             'prompt_spec_name': prompt_spec_name,
-            'use_tools': use_tools
+            'use_tools': use_tools,
+            'use_autogen': use_autogen
         })
         
         # Get or create batch processor instance
@@ -65,7 +67,8 @@ def launch_batch():
             scenarios=scenarios, 
             prompt_version=prompt_version,
             prompt_spec_name=prompt_spec_name,
-            use_tools=use_tools
+            use_tools=use_tools,
+            use_autogen=use_autogen
         )
         
         # Start batch processing in background
@@ -95,7 +98,8 @@ def launch_batch():
             'total_scenarios': len(scenarios),
             'prompt_version': prompt_version,
             'prompt_spec_name': prompt_spec_name,
-            'use_tools': use_tools
+            'use_tools': use_tools,
+            'use_autogen': use_autogen
         }), 200
         
     except Exception as e:

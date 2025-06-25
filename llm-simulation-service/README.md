@@ -412,7 +412,8 @@ Content-Type: application/json
   ],
   "prompt_spec_name": "default_prompts",
   "prompt_version": "v1.0",
-  "use_tools": true
+  "use_tools": true,
+  "use_autogen": false
 }
 ```
 
@@ -420,6 +421,7 @@ Content-Type: application/json
 - `prompt_spec_name` (string): Name of the prompt specification file to use (default: "default_prompts")
 - `prompt_version` (string): Version identifier for tracking (default: "v1.0")
 - `use_tools` (boolean): Whether to enable tool calling (default: true)
+- `use_autogen` (boolean): Whether to run conversations with the AutoGen library (default: false)
 
 **Response:**
 ```json
@@ -429,7 +431,8 @@ Content-Type: application/json
   "total_scenarios": 1,
   "prompt_spec_name": "default_prompts",
   "prompt_version": "v1.0",
-  "use_tools": true
+  "use_tools": true,
+  "use_autogen": false
 }
 ```
 

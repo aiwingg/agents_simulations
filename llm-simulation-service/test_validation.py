@@ -215,6 +215,28 @@ def test_cli_structure():
         print(f"✗ CLI structure test failed: {e}")
         return False
 
+def test_use_autogen_parameter():
+    """Ensure BatchProcessor stores the use_autogen flag."""
+    print("\nTesting use_autogen parameter...")
+
+    try:
+        from src.batch_processor import BatchProcessor
+        from src.config import Config
+
+        processor = BatchProcessor(Config.OPENAI_API_KEY, concurrency=1)
+        batch_id = processor.create_batch_job([
+            {"name": "test", "variables": {}}
+        ], use_tools=False, use_autogen=True)
+
+        status = processor.get_batch_status(batch_id)
+        assert status["use_autogen"] is True
+        print("✓ use_autogen flag stored correctly")
+        return True
+
+    except Exception as e:
+        print(f"✗ use_autogen test failed: {e}")
+        return False
+
 def main():
     """Run all validation tests"""
     print("=" * 60)
@@ -227,7 +249,8 @@ def main():
         test_scenario_loading,
         test_prompt_templates,
         test_flask_app,
-        test_cli_structure
+        test_cli_structure,
+        test_use_autogen_parameter
     ]
     
     passed = 0

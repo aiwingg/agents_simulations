@@ -29,9 +29,10 @@ class SimulateCLI:
 
 
 async def run_batch_local(scenarios: List[Dict[str, Any]], output_dir: str,
-                          prompt_spec_name: str = "default_prompts") -> Dict[str, Any]:
+                          prompt_spec_name: str = "default_prompts",
+                          use_autogen: bool = False) -> Dict[str, Any]:
     """Thin wrapper used by tests to run a batch locally."""
-    return await run_batch_scenarios(scenarios, output_dir, prompt_spec_name)
+    return await run_batch_scenarios(scenarios, output_dir, prompt_spec_name, use_autogen)
 
 
 def get_batch_status_via_api(batch_id: str, api_url: str = "http://localhost:5000") -> Optional[Dict[str, Any]]:
@@ -144,8 +145,9 @@ async def run_single_scenario(scenario: Dict[str, Any], output_dir: str, stream:
     
     return final_result
 
-async def run_batch_scenarios(scenarios: List[Dict[str, Any]], output_dir: str, 
-                            prompt_spec_name: str = "default_prompts") -> Dict[str, Any]:
+async def run_batch_scenarios(scenarios: List[Dict[str, Any]], output_dir: str,
+                            prompt_spec_name: str = "default_prompts",
+                            use_autogen: bool = False) -> Dict[str, Any]:
     """Run multiple scenarios as a batch"""
     
     logger = get_logger()
@@ -155,13 +157,15 @@ async def run_batch_scenarios(scenarios: List[Dict[str, Any]], output_dir: str,
     print(f"📋 Prompt specification: {prompt_spec_name}")
     print(f"⚡ Concurrency: {Config.CONCURRENCY}")
     print(f"🔧 Using tools: {Config.USE_TOOLS}")
+    print(f"🧩 Use autogen: {use_autogen}")
     
     # Create batch job
     batch_id = batch_processor.create_batch_job(
         scenarios=scenarios,
         prompt_version="cli-v1.0",
         prompt_spec_name=prompt_spec_name,
-        use_tools=Config.USE_TOOLS
+        use_tools=Config.USE_TOOLS,
+        use_autogen=use_autogen
     )
     
     print(f"🆔 Batch ID: {batch_id}")
@@ -278,6 +282,7 @@ Examples:
     run_parser.add_argument('--single', type=int, metavar='INDEX', help='Run only the scenario at specified index')
     run_parser.add_argument('--no-stream', action='store_true', help='Disable streaming output for single scenarios')
     run_parser.add_argument('--prompt-spec', default='default_prompts', help='Prompt specification name to use')
+    run_parser.add_argument('--use-autogen', action='store_true', help='Enable AutoGen-based agent control')
     
     # Status command
     status_parser = subparsers.add_parser('status', help='Check batch status')
@@ -367,9 +372,10 @@ Examples:
         else:
             # Run batch
             result = asyncio.run(run_batch_scenarios(
-                scenarios, 
+                scenarios,
                 args.output_dir,
-                prompt_spec_name=args.prompt_spec
+                prompt_spec_name=args.prompt_spec,
+                use_autogen=args.use_autogen
             ))
     
     elif args.command == 'status':

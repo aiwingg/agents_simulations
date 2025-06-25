@@ -133,7 +133,7 @@ VITE_API_BASE_URL=http://localhost:5001
 ## 📊 API Endpoints
 
 ### Batch Management
-- `POST /api/batches` - Launch new batch simulation
+- `POST /api/batches` - Launch new batch simulation (supports `use_autogen` flag)
 - `GET /api/batches` - List all batches
 - `GET /api/batches/{id}` - Get batch status
 - `GET /api/batches/{id}/results` - Get batch results

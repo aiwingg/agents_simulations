@@ -38,7 +38,7 @@ All requirements from the PRD have been successfully implemented and tested.
 - File-based storage with organized directory structure
 
 #### ✅ REST API
-- POST /api/batches - Launch batch jobs
+- POST /api/batches - Launch batch jobs (supports `use_autogen` flag)
 - GET /api/batches/{id} - Check batch status
 - GET /api/batches/{id}/results - Download results
 - GET /api/batches/{id}/summary - Get summary statistics
@@ -51,6 +51,7 @@ All requirements from the PRD have been successfully implemented and tested.
 - `simulate status` - Check batch status via API
 - `simulate fetch` - Download results via API
 - Single scenario streaming mode
+- `--use-autogen` flag for batch runs
 - Comprehensive help system
 
 #### ✅ Infrastructure
@@ -160,6 +161,7 @@ python src/main.py
 curl -X POST http://localhost:5000/api/batches \
   -H "Content-Type: application/json" \
   -d @scenarios/sample_scenarios.json
+# include {"use_autogen": true} to enable AutoGen
 ```
 
 **Docker Deployment:**
