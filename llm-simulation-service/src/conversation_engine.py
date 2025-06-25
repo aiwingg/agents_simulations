@@ -451,8 +451,12 @@ class ConversationEngine:
         # Enrich variables with client data if client_id is provided
         variables, webhook_session_id = await self._enrich_variables_with_client_data(variables)
 
-        session_id = webhook_session_id
-        self.logger.log_info(f"Using session_id from webhook: {session_id}")
+        if webhook_session_id:
+            session_id = webhook_session_id
+            self.logger.log_info(f"Using session_id from webhook: {session_id}")
+        else:
+            session_id = await self.webhook_manager.initialize_session()
+            self.logger.log_info(f"Using generated session_id: {session_id}")
 
         
         self.logger.log_info(f"Starting conversation simulation with tools", extra_data={

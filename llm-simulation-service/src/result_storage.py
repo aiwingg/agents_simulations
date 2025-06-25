@@ -12,17 +12,20 @@ from src.logging_utils import get_logger
 
 class ResultStorage:
     """Handles storage and export of simulation results"""
-    
-    def __init__(self):
+
+    def __init__(self, results_dir: Optional[str] = None):
         self.logger = get_logger()
+        self.results_dir = results_dir or Config.RESULTS_DIR
         Config.ensure_directories()
+        if results_dir:
+            os.makedirs(self.results_dir, exist_ok=True)
     
     def save_batch_results_ndjson(self, batch_id: str, results: List[Dict[str, Any]]) -> str:
         """Save batch results in NDJSON format"""
         
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
         filename = f"batch_{batch_id}_{timestamp}.ndjson"
-        filepath = os.path.join(Config.RESULTS_DIR, filename)
+        filepath = os.path.join(self.results_dir, filename)
         
         try:
             with open(filepath, 'w', encoding='utf-8') as f:
@@ -47,13 +50,13 @@ class ResultStorage:
             self.logger.log_error(f"Failed to save NDJSON results", exception=e, extra_data={'batch_id': batch_id})
             raise e
     
-    def save_batch_results_csv(self, batch_id: str, results: List[Dict[str, Any]], 
+    def save_batch_results_csv(self, batch_id: str, results: List[Dict[str, Any]],
                               prompt_version: str = "default") -> str:
         """Save batch results in CSV format as specified in PRD"""
         
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
         filename = f"batch_{batch_id}_{timestamp}.csv"
-        filepath = os.path.join(Config.RESULTS_DIR, filename)
+        filepath = os.path.join(self.results_dir, filename)
         
         try:
             # Prepare CSV data according to PRD format:
@@ -95,6 +98,50 @@ class ResultStorage:
             
         except Exception as e:
             self.logger.log_error(f"Failed to save CSV results", exception=e, extra_data={'batch_id': batch_id})
+            raise e
+
+    def save_batch_results_json(self, batch_id: str, results: List[Dict[str, Any]]) -> str:
+        """Save batch results in JSON format"""
+
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        filename = f"batch_{batch_id}_{timestamp}.json"
+        filepath = os.path.join(self.results_dir, filename)
+
+        try:
+            with open(filepath, 'w', encoding='utf-8') as f:
+                json.dump({
+                    'batch_id': batch_id,
+                    'export_timestamp': datetime.now().isoformat(),
+                    'results': results
+                }, f, ensure_ascii=False, indent=2)
+
+            self.logger.log_info("Saved JSON results", extra_data={
+                'batch_id': batch_id,
+                'filepath': filepath,
+                'result_count': len(results)
+            })
+
+            return filepath
+
+        except Exception as e:
+            self.logger.log_error("Failed to save JSON results", exception=e, extra_data={'batch_id': batch_id})
+            raise e
+
+    def save_single_result(self, filename: str, result: Dict[str, Any]) -> str:
+        """Save a single scenario result to a JSON file"""
+
+        filepath = os.path.join(self.results_dir, filename)
+
+        try:
+            with open(filepath, 'w', encoding='utf-8') as f:
+                json.dump(result, f, ensure_ascii=False, indent=2)
+
+            self.logger.log_info("Saved single result", extra_data={'filepath': filepath})
+
+            return filepath
+
+        except Exception as e:
+            self.logger.log_error("Failed to save single result", exception=e, extra_data={'filepath': filepath})
             raise e
     
     def generate_summary_report(self, batch_id: str, results: List[Dict[str, Any]]) -> Dict[str, Any]:
@@ -215,7 +262,7 @@ class ResultStorage:
         batch_id = summary.get('batch_id', 'unknown')
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
         filename = f"summary_{batch_id}_{timestamp}.json"
-        filepath = os.path.join(Config.RESULTS_DIR, filename)
+        filepath = os.path.join(self.results_dir, filename)
         
         try:
             with open(filepath, 'w', encoding='utf-8') as f:
@@ -308,11 +355,11 @@ class ResultStorage:
         try:
             files = []
             
-            for filename in os.listdir(Config.RESULTS_DIR):
+            for filename in os.listdir(self.results_dir):
                 if batch_id and batch_id not in filename:
                     continue
                 
-                filepath = os.path.join(Config.RESULTS_DIR, filename)
+                filepath = os.path.join(self.results_dir, filename)
                 if os.path.isfile(filepath):
                     stat = os.stat(filepath)
                     
