@@ -456,9 +456,9 @@ class BatchProcessor:
                 # Update progress
                 if progress_callback:
                     if asyncio.iscoroutinefunction(progress_callback):
-                        await progress_callback(batch_id, scenario_index + 1)
+                        await progress_callback(scenario_index + 1, job.total_scenarios)
                     else:
-                        progress_callback(batch_id, scenario_index + 1)
+                        progress_callback(scenario_index + 1, job.total_scenarios)
                 
                 # Update progress in batch job and save to storage (thread-safe)
                 if progress_lock:

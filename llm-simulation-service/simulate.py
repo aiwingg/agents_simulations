@@ -7,6 +7,7 @@ import asyncio
 import json
 import sys
 import os
+import re
 from typing import Dict, Any, List, Optional
 from datetime import datetime
 
@@ -21,6 +22,12 @@ from src.batch_processor import BatchProcessor
 from src.result_storage import ResultStorage
 from src.logging_utils import get_logger
 from src.prompt_specification import PromptSpecificationManager
+
+
+def safe_filename(name: str, max_length: int = 50) -> str:
+    """Sanitize a string so it can be used as a filename."""
+    sanitized = re.sub(r"[^A-Za-z0-9_-]+", "_", name)
+    return sanitized[:max_length]
 
 
 class SimulateCLI:
@@ -135,12 +142,13 @@ async def run_single_scenario(scenario: Dict[str, Any], output_dir: str, stream:
     # Save results
     result_storage = ResultStorage(output_dir)
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    filename = f"single_{scenario_name}_{timestamp}.json"
-    
-    result_storage.save_single_result(filename, final_result)
-    
+    safe_name = safe_filename(scenario_name)
+    filename = f"single_{safe_name}_{timestamp}.json"
+
+    filepath = result_storage.save_single_result(filename, final_result)
+
     if stream:
-        print(f"\n💾 Results saved to: {os.path.join(output_dir, filename)}")
+        print(f"\n💾 Results saved to: {filepath}")
     
     return final_result
 
@@ -185,25 +193,20 @@ async def run_batch_scenarios(scenarios: List[Dict[str, Any]], output_dir: str,
             
             # Save in multiple formats
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            
-            ndjson_file = f"batch_{batch_id}_{timestamp}.ndjson"
-            csv_file = f"batch_{batch_id}_{timestamp}.csv"
-            json_file = f"batch_{batch_id}_{timestamp}.json"
-            
-            result_storage.save_batch_results_ndjson(batch_id, results)
-            result_storage.save_batch_results_csv(batch_id, results)
-            result_storage.save_batch_results_json(batch_id, results)
-            
+
+            ndjson_path = result_storage.save_batch_results_ndjson(batch_id, results)
+            csv_path = result_storage.save_batch_results_csv(batch_id, results)
+            json_path = result_storage.save_batch_results_json(batch_id, results)
+
             print(f"\n💾 Results saved:")
-            print(f"  📄 NDJSON: {ndjson_file}")
-            print(f"  📊 CSV: {csv_file}")
-            print(f"  📋 JSON: {json_file}")
+            print(f"  📄 NDJSON: {ndjson_path}")
+            print(f"  📊 CSV: {csv_path}")
+            print(f"  📋 JSON: {json_path}")
             
             # Generate summary
             summary = result_storage.generate_summary_report(batch_id, results)
-            summary_file = f"summary_{batch_id}_{timestamp}.json"
-            result_storage.save_summary_report(summary)
-            print(f"  📈 Summary: {summary_file}")
+            summary_path = result_storage.save_summary_report(summary)
+            print(f"  📈 Summary: {summary_path}")
             
         else:
             print(f"\n❌ Batch failed: {result.get('error', 'unknown error')}")

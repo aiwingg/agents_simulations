@@ -13,6 +13,7 @@ from src.tool_emulator import ToolEmulator
 from src.logging_utils import get_logger
 from src.prompt_specification import PromptSpecificationManager, SystemPromptSpecification
 from src.tools_specification import ToolsSpecification
+from jinja2 import Environment, BaseLoader, Template, StrictUndefined, DebugUndefined, UndefinedError
 
 class ConversationEngine:
     """Core engine for managing conversations between Agent-LLM and Client-LLM with multi-agent support"""
@@ -38,7 +39,7 @@ class ConversationEngine:
         })
     
     def _format_prompt(self, template: str, variables: Dict[str, Any], session_id: str) -> str:
-        """Format prompt template with variables"""
+        """Format prompt template with variables using Jinja2"""
         try:
             # Add session_id to variables
             variables = variables.copy()
@@ -53,7 +54,9 @@ class ConversationEngine:
                 'PURCHASE_HISTORY': 'История покупок отсутствует',
                 'purchase_history': 'История покупок отсутствует',
                 'name': variables.get('CLIENT_NAME', 'Клиент'),
-                'locations': variables.get('LOCATION', 'Адрес не указан')
+                'locations': variables.get('LOCATION', 'Адрес не указан'),
+                'CLIENT_NAME': variables.get('CLIENT_NAME', 'Клиент'),
+                'LOCATION': variables.get('LOCATION', 'Адрес не указан')
             }
             
             # Add defaults for missing variables
@@ -61,23 +64,34 @@ class ConversationEngine:
                 if key not in variables:
                     variables[key] = default_value
             
-            # Convert Jinja2-style {{variable}} to Python format {variable}
-            import re
-            formatted_template = re.sub(r'\{\{(\w+)\}\}', r'{\1}', template)
+            # Create Jinja2 environment with undefined handling
+            jinja_env = Environment(
+                loader=BaseLoader(),
+                undefined=StrictUndefined
+            )
             
-            return formatted_template.format(**variables)
-        except KeyError as e:
-            self.logger.log_error(f"Missing variable in prompt template: {e}")
-            # Try to replace remaining variables with placeholders
-            import re
-            remaining_vars = re.findall(r'\{(\w+)\}', template)
-            for var in remaining_vars:
-                if var not in variables:
-                    variables[var] = f"[{var}_NOT_SET]"
-            try:
-                formatted_template = re.sub(r'\{\{(\w+)\}\}', r'{\1}', template)
-                return formatted_template.format(**variables)
-            except:
+            # Use Jinja2 to render the template with proper variable handling
+            jinja_template = jinja_env.from_string(template)
+            return jinja_template.render(**variables)
+            
+        except Exception as e:
+            if isinstance(e, UndefinedError):
+                self.logger.log_error(f"Missing variable in prompt template: {e}")
+                # For missing variables, try with a more lenient approach
+                try:
+                    jinja_env_lenient = Environment(
+                        loader=BaseLoader(),
+                        undefined=DebugUndefined
+                    )
+                    jinja_template = jinja_env_lenient.from_string(template)
+                    result = jinja_template.render(**variables)
+                    self.logger.log_info(f"Template rendered with debug undefined variables")
+                    return result
+                except Exception as fallback_error:
+                    self.logger.log_error(f"Template rendering failed even with lenient mode: {fallback_error}")
+                    return template
+            else:
+                self.logger.log_error(f"Template rendering error: {e}")
                 return template
     
     async def _enrich_variables_with_client_data(self, variables: Dict[str, Any]) -> Tuple[Dict[str, Any], Optional[str]]:
@@ -451,8 +465,12 @@ class ConversationEngine:
         # Enrich variables with client data if client_id is provided
         variables, webhook_session_id = await self._enrich_variables_with_client_data(variables)
 
-        session_id = webhook_session_id
-        self.logger.log_info(f"Using session_id from webhook: {session_id}")
+        if webhook_session_id:
+            session_id = webhook_session_id
+            self.logger.log_info(f"Using session_id from webhook: {session_id}")
+        else:
+            session_id = await self.webhook_manager.initialize_session()
+            self.logger.log_info(f"Using generated session_id: {session_id}")
 
         
         self.logger.log_info(f"Starting conversation simulation with tools", extra_data={

@@ -19,6 +19,7 @@ class Config:
     MAX_TURNS: int = int(os.getenv('MAX_TURNS', '30'))
     TIMEOUT_SEC: int = int(os.getenv('TIMEOUT_SEC', '90'))
     CONCURRENCY: int = int(os.getenv('CONCURRENCY', '4'))
+    USE_TOOLS: bool = os.getenv('USE_TOOLS', 'True').lower() == 'true'
     
     # Webhook Configuration
     WEBHOOK_URL: str = os.getenv('WEBHOOK_URL', '')
