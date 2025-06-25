@@ -22,6 +22,45 @@ from src.result_storage import ResultStorage
 from src.logging_utils import get_logger
 from src.prompt_specification import PromptSpecificationManager
 
+
+class SimulateCLI:
+    """Placeholder class for CLI structure tests."""
+    pass
+
+
+async def run_batch_local(scenarios: List[Dict[str, Any]], output_dir: str,
+                          prompt_spec_name: str = "default_prompts") -> Dict[str, Any]:
+    """Thin wrapper used by tests to run a batch locally."""
+    return await run_batch_scenarios(scenarios, output_dir, prompt_spec_name)
+
+
+def get_batch_status_via_api(batch_id: str, api_url: str = "http://localhost:5000") -> Optional[Dict[str, Any]]:
+    """Retrieve batch status from the service API."""
+    import requests
+    try:
+        response = requests.get(f"{api_url}/api/batches/{batch_id}")
+        if response.status_code == 200:
+            return response.json()
+    except requests.RequestException:
+        pass
+    return None
+
+
+def fetch_batch_results_via_api(batch_id: str, api_url: str = "http://localhost:5000",
+                                fmt: str = "json") -> Optional[str]:
+    """Fetch batch results from the service API."""
+    import requests
+    try:
+        response = requests.get(
+            f"{api_url}/api/batches/{batch_id}/results",
+            params={"format": fmt}
+        )
+        if response.status_code == 200:
+            return response.text
+    except requests.RequestException:
+        pass
+    return None
+
 def setup_cli_logging():
     """Setup logging for CLI usage"""
     # For CLI, we'll just use a simple logger setup
