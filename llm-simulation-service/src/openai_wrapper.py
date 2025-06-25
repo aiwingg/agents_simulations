@@ -5,6 +5,7 @@ import asyncio
 import json
 import time
 import uuid
+import os
 from typing import Dict, List, Optional, Any, Tuple
 from openai import AsyncOpenAI
 from asyncio_throttle import Throttler
@@ -12,15 +13,37 @@ import random
 from src.config import Config
 from src.logging_utils import get_logger
 
+# Braintrust imports
+from braintrust import init_logger, wrap_openai
+
 class OpenAIWrapper:
     """Wrapper for OpenAI API with retry logic and rate limiting"""
     
     def __init__(self, api_key: str, model: str = None, max_retries: int = 3):
+        # Initialize standard OpenAI client
         self.client = AsyncOpenAI(api_key=api_key)
+        
+        # Initialize Braintrust tracing
+        if os.getenv('BRAINTRUST_API_KEY'):
+            try:
+                self.braintrust_logger = init_logger(
+                    project="LLM Simulation Service",
+                    api_key=os.getenv('BRAINTRUST_API_KEY')
+                )
+                # Wrap the OpenAI client with Braintrust tracing
+                self.client = wrap_openai(self.client)
+                self.logger = get_logger()
+                self.logger.log_info("Braintrust tracing initialized successfully")
+            except Exception as e:
+                self.logger = get_logger()
+                self.logger.log_error(f"Failed to initialize Braintrust tracing: {e}")
+        else:
+            self.logger = get_logger()
+            self.logger.log_info("BRAINTRUST_API_KEY not set - tracing disabled")
+        
         self.model = model or Config.OPENAI_MODEL
         self.max_retries = max_retries
         self.throttler = Throttler(rate_limit=200, period=1)  # 200 requests per second
-        self.logger = get_logger()
         
         # Token cost estimates (per 1K tokens) - approximate values
         self.token_costs = {

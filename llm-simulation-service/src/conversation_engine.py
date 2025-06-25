@@ -15,6 +15,9 @@ from src.prompt_specification import PromptSpecificationManager, SystemPromptSpe
 from src.tools_specification import ToolsSpecification
 from jinja2 import Environment, BaseLoader, Template, StrictUndefined, DebugUndefined, UndefinedError
 
+# Braintrust tracing import
+from braintrust import traced
+
 class ConversationEngine:
     """Core engine for managing conversations between Agent-LLM and Client-LLM with multi-agent support"""
     
@@ -147,6 +150,7 @@ class ConversationEngine:
                 
         return variables, webhook_session_id
 
+    @traced(name="run_conversation")
     async def run_conversation(self, scenario: Dict[str, Any], max_turns: Optional[int] = None, timeout_sec: Optional[int] = None) -> Dict[str, Any]:
         """Run a complete conversation simulation"""
         
@@ -452,6 +456,7 @@ class ConversationEngine:
             self.logger.log_error(f"Unexpected error parsing tool result: {content}", exception=e)
             return content
     
+    @traced(name="run_conversation_with_tools")
     async def run_conversation_with_tools(self, scenario: Dict[str, Any], max_turns: Optional[int] = None, timeout_sec: Optional[int] = None) -> Dict[str, Any]:
         """Run conversation with tool calling support"""
         
