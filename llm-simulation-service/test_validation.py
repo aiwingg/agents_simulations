@@ -7,7 +7,8 @@ import os
 import json
 
 # Add project root to path
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, BASE_DIR)
 
 def test_imports():
     """Test that all modules can be imported"""
@@ -85,7 +86,7 @@ def test_scenario_loading():
     print("\nTesting scenario loading...")
     
     try:
-        scenario_file = "scenarios/sample_scenarios.json"
+        scenario_file = os.path.join(BASE_DIR, "scenarios", "sample_scenarios.json")
         
         if os.path.exists(scenario_file):
             with open(scenario_file, 'r', encoding='utf-8') as f:
@@ -117,9 +118,9 @@ def test_prompt_templates():
     
     try:
         prompt_files = [
-            "prompts/agent_system.txt",
-            "prompts/client_system.txt", 
-            "prompts/evaluator_system.txt"
+            os.path.join(BASE_DIR, "prompts", "agent_system.txt"),
+            os.path.join(BASE_DIR, "prompts", "client_system.txt"),
+            os.path.join(BASE_DIR, "prompts", "evaluator_system.txt")
         ]
         
         for prompt_file in prompt_files:
@@ -175,7 +176,7 @@ def test_cli_structure():
     
     try:
         # Test CLI script exists and is executable
-        cli_script = "simulate.py"
+        cli_script = os.path.join(BASE_DIR, "simulate.py")
         
         if os.path.exists(cli_script):
             # Check if file is executable
