@@ -28,12 +28,10 @@ client:
   organisation_name:      {{name}}
   locations:              {{locations}}
   accepted_delivery_days: {{delivery_days}}
-history:
-  last_month_orders:      {{purchase_history}}
-upsell_candidates:        {{upsell_list}}        # заранее готовый список
-state:
-  delivery_date:          {{delivery_date}}
-  delivery_location:      {{delivery_location}}
+upsell_candidates:        # заранее готовый список
+  - Каре из баранины маринованное в/у зам. Агромакс Глобал, код 01-00015157
+  - Грудка ЦБ 5кг лот охл Благояр, ЦБ-00000669
+  - Яйцо куриное С2 Волжское, код 01-00001736
 ```
 
 ---

@@ -4,9 +4,11 @@ A comprehensive platform for simulating and evaluating conversations between LLM
 
 ## 🚀 Features
 
+- **Multi-Agent Conversations**: Support for complex multi-agent systems with seamless handoffs between specialized agents
+- **File-Based Prompt Management**: Store prompts in separate text files for easier editing and version control
 - **Batch Conversation Simulation**: Run multiple conversation scenarios in parallel
 - **Real-time Progress Tracking**: Monitor simulation progress with live updates
-- **Conversation Evaluation**: Automated scoring and evaluation of conversation quality
+- **Conversation Evaluation**: Automated scoring and evaluation of conversation quality with multi-agent coordination assessment
 - **Result Analytics**: Comprehensive statistics and summary reports
 - **Persistent Storage**: All results persist across server restarts
 - **Export Capabilities**: Download results in CSV and NDJSON formats
@@ -19,6 +21,8 @@ The platform consists of two main components:
 
 ### Backend (`llm-simulation-service`)
 - **Flask-based REST API** with comprehensive endpoints
+- **Multi-Agent Conversation Engine** with support for agent handoffs and context management
+- **File-Based Prompt System** with support for external text files and flexible configuration
 - **Async batch processing** with configurable concurrency
 - **OpenAI GPT integration** for conversation simulation and evaluation
 - **Persistent storage system** with JSON-based metadata
@@ -103,12 +107,13 @@ The frontend will start on `http://localhost:5175`
 ## 📖 Usage
 
 1. **Open the web interface** at `http://localhost:5175`
-2. **Configure scenarios** by adding conversation variables
-3. **Launch batch simulations** with your desired parameters
-4. **Monitor progress** in real-time through the dashboard
-5. **View results** with detailed conversation logs and evaluations
-6. **Compare batches** using the comparison tools
-7. **Export data** in CSV or NDJSON formats
+2. **Select prompt specification** including multi-agent configurations with file-based prompts
+3. **Configure scenarios** by adding conversation variables
+4. **Launch batch simulations** with your desired parameters
+5. **Monitor progress** in real-time through the dashboard including agent handoffs
+6. **View results** with detailed conversation logs, multi-agent coordination, and evaluations
+7. **Compare batches** using the comparison tools
+8. **Export data** in CSV or NDJSON formats
 
 ## 🔧 Configuration
 
@@ -188,11 +193,12 @@ The application features a robust persistence system:
 
 ## 🎯 Use Cases
 
+- **Multi-Agent System Testing**: Evaluate complex agent handoffs and coordination
 - **Conversational AI Testing**: Evaluate chatbot performance across scenarios
 - **Training Data Generation**: Create conversation datasets for model training
-- **A/B Testing**: Compare different prompt versions or model configurations
-- **Quality Assurance**: Automated testing of conversational flows
-- **Performance Benchmarking**: Measure response quality and consistency
+- **A/B Testing**: Compare different prompt versions, multi-agent configurations, or model settings
+- **Quality Assurance**: Automated testing of conversational flows and agent transitions
+- **Performance Benchmarking**: Measure response quality, consistency, and agent coordination
 
 ## 🐛 Troubleshooting
 
