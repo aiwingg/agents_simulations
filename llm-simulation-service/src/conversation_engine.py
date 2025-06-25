@@ -507,6 +507,9 @@ class ConversationEngine:
             agent_tools = agent_spec.get_tool_schemas()
             client_tools = client_spec.get_tool_schemas()
             
+            # Track current agent messages for handoff flow
+            self._current_agent_messages = agent_messages.copy()
+            
             # Start conversation with client greeting
             # client_messages.append({"role": "assistant", "content": "Добрый день!"})
             # agent_messages.append({"role": "user", "content": "Добрый день!"})
@@ -534,13 +537,18 @@ class ConversationEngine:
                 
                 turn_number += 1
                 
-                # Agent turn
+                # Agent turn - use current agent messages to maintain context
                 agent_response, agent_usage = await self.openai.chat_completion(
-                    messages=agent_messages,
+                    messages=self._current_agent_messages,
                     session_id=session_id,
                     tools=agent_tools,
                     seed=seed
                 )
+                
+                # Get initial agent content
+                initial_agent_content = agent_response.content if hasattr(agent_response, 'content') else str(agent_response)
+                if not initial_agent_content:
+                    initial_agent_content = ""
                 
                 # Check if agent made tool calls
                 if hasattr(agent_response, 'tool_calls') and agent_response.tool_calls:
@@ -557,120 +565,82 @@ class ConversationEngine:
                         for tool_call in agent_response.tool_calls
                     ]
                     
-                    # Add assistant message with tool calls
-                    agent_messages.append({
-                        "role": "assistant",
-                        "content": agent_response.content or "",
-                        "tool_calls": tool_calls
-                    })
+                    # Check if any tool calls are handoffs
+                    has_handoff = any(ToolsSpecification.is_handoff_tool(tc["function"]["name"]) for tc in tool_calls)
                     
-                    # Process tool calls
-                    tool_responses, new_current_agent = await self._handle_tool_calls(tool_calls, session_id)
-                    
-                    # Handle agent handoff if needed
-                    if new_current_agent and new_current_agent != self.current_agent:
-                        self.logger.log_info(f"Switching active agent from {self.current_agent} to {new_current_agent}", extra_data={
-                            'session_id': session_id,
-                            'turn_number': turn_number,
-                            'previous_agent': self.current_agent,
-                            'new_agent': new_current_agent
+                    if has_handoff:
+                        # Use handoff flow for handoff tools
+                        agent_content, conversation_entries = await self._handle_handoff_flow(
+                            tool_calls=tool_calls,
+                            agent_response_content=initial_agent_content,
+                            session_id=session_id,
+                            turn_number=turn_number,
+                            variables=variables,
+                            conversation_history=conversation_history
+                        )
+                        
+                        # Add all conversation entries to history
+                        conversation_history.extend(conversation_entries)
+                        
+                        # Update agent tools if agent changed
+                        current_agent_spec = self.prompt_specification.get_agent_prompt(self.current_agent)
+                        if current_agent_spec:
+                            agent_tools = current_agent_spec.get_tool_schemas()
+                    else:
+                        # Handle regular tool calls without handoff flow
+                        # Add assistant message with tool calls
+                        self._current_agent_messages.append({
+                            "role": "assistant",
+                            "content": initial_agent_content or "",
+                            "tool_calls": tool_calls
                         })
                         
-                        # IMPORTANT: Always add tool responses first to avoid OpenAI error
-                        agent_messages.extend(tool_responses)
+                        # Process tool calls
+                        tool_responses, _ = await self._handle_tool_calls(tool_calls, session_id)
                         
-                        # Save current agent context (including tool responses)
-                        self.agent_contexts[self.current_agent] = agent_messages.copy()
+                        # Add tool responses
+                        self._current_agent_messages.extend(tool_responses)
                         
-                        # Switch to new agent
-                        self.current_agent = new_current_agent
+                        # Get agent response after tool calls
+                        agent_final_response, _ = await self.openai.chat_completion(
+                            messages=self._current_agent_messages,
+                            session_id=session_id,
+                            tools=agent_tools,
+                            seed=seed
+                        )
                         
-                        # Initialize new agent context if not exists
-                        if new_current_agent not in self.agent_contexts:
-                            new_agent_spec = self.prompt_specification.get_agent_prompt(new_current_agent)
-                            if new_agent_spec:
-                                new_agent_system_prompt = self._format_prompt(new_agent_spec.prompt, variables, session_id)
-                                self.agent_contexts[new_current_agent] = [{"role": "system", "content": new_agent_system_prompt}]
+                        agent_content = agent_final_response.content if hasattr(agent_final_response, 'content') else str(agent_final_response)
+                        if not agent_content:
+                            agent_content = ""
                         
-                        # Use new agent's context
-                        agent_messages = self.agent_contexts[new_current_agent].copy()
+                        # Update current agent messages
+                        self._current_agent_messages.append({"role": "assistant", "content": agent_content})
                         
-                        # Update tools for new agent
-                        new_agent_spec = self.prompt_specification.get_agent_prompt(new_current_agent)
-                        if new_agent_spec:
-                            agent_tools = new_agent_spec.get_tool_schemas()
+                        # Log agent turn with tool calls and results
+                        self.logger.log_conversation_turn(
+                            session_id=session_id,
+                            turn_number=turn_number,
+                            role=f"agent_{self.current_agent}",
+                            content=agent_content,
+                            tool_calls=tool_calls,
+                            tool_results=[self._safe_parse_tool_result(response["content"]) for response in tool_responses]
+                        )
                         
-                        # Add conversation history to new agent context
-                        # Add the client's last message to provide context
-                        if conversation_history:
-                            last_client_message = None
-                            for entry in reversed(conversation_history):
-                                if entry['speaker'] == 'client':
-                                    last_client_message = entry['content']
-                                    break
-                            
-                            if last_client_message:
-                                agent_messages.append({"role": "user", "content": last_client_message})
-                        
-                        # For handoff, add a user message explaining the handoff to the new agent
-                        handoff_message = f"You are now taking over this conversation. The previous agent has transferred the customer to you."
-                        if conversation_history:
-                            # Add context about what has happened so far
-                            context_summary = "Previous conversation context: "
-                            for entry in conversation_history[-3:]:  # Last 3 turns for context
-                                context_summary += f"{entry['speaker']}: {entry['content'][:100]}... "
-                            handoff_message += f" {context_summary}"
-                        
-                        agent_messages.append({"role": "user", "content": handoff_message})
-                    else:
-                        # Add tool responses to agent messages (normal flow, no handoff)
-                        agent_messages.extend(tool_responses)
-                    
-                    # Get agent response after tool calls
-                    # Debug: Log the message structure before sending to OpenAI
-                    self.logger.log_info(f"About to make second OpenAI call with messages", extra_data={
-                        'session_id': session_id,
-                        'message_count': len(agent_messages),
-                        'last_3_messages': agent_messages[-3:] if len(agent_messages) >= 3 else agent_messages,
-                        'handoff_occurred': new_current_agent is not None
-                    })
-                    
-                    agent_final_response, agent_usage_2 = await self.openai.chat_completion(
-                        messages=agent_messages,
-                        session_id=session_id,
-                        tools=agent_tools,
-                        seed=seed
-                    )
-                    
-                    agent_content = agent_final_response.content if hasattr(agent_final_response, 'content') else str(agent_final_response)
-                    # Ensure agent_content is never null or empty
-                    if not agent_content:
-                        agent_content = ""
-                    
-                    # Log agent turn with tool calls and results
-                    self.logger.log_conversation_turn(
-                        session_id=session_id,
-                        turn_number=turn_number,
-                        role=f"agent_{self.current_agent}",
-                        content=agent_content,
-                        tool_calls=tool_calls,
-                        tool_results=[self._safe_parse_tool_result(response["content"]) for response in tool_responses]
-                    )
-                    
-                    # Add tool calls and results to conversation history
-                    conversation_history.append({
-                        "turn": turn_number,
-                        "speaker": f"agent_{self.current_agent}",
-                        "content": agent_content,
-                        "tool_calls": tool_calls,
-                        "tool_results": [self._safe_parse_tool_result(response["content"]) for response in tool_responses],
-                        "timestamp": datetime.now().isoformat()
-                    })
+                        # Add to conversation history
+                        conversation_history.append({
+                            "turn": turn_number,
+                            "speaker": f"agent_{self.current_agent}",
+                            "content": agent_content,
+                            "tool_calls": tool_calls,
+                            "tool_results": [self._safe_parse_tool_result(response["content"]) for response in tool_responses],
+                            "visible_to_client": True,
+                            "timestamp": datetime.now().isoformat()
+                        })
                 else:
-                    agent_content = agent_response.content if hasattr(agent_response, 'content') else str(agent_response)
-                    # Ensure agent_content is never null or empty
-                    if not agent_content:
-                        agent_content = ""
+                    agent_content = initial_agent_content
+                    
+                    # Update current agent messages for next iteration
+                    self._current_agent_messages.append({"role": "assistant", "content": agent_content})
                     
                     # Log agent turn without tool calls
                     self.logger.log_conversation_turn(
@@ -684,11 +654,17 @@ class ConversationEngine:
                         "turn": turn_number,
                         "speaker": f"agent_{self.current_agent}",
                         "content": agent_content,
+                        "visible_to_client": True,  # Regular agent messages are visible
                         "timestamp": datetime.now().isoformat()
                     })
                 
-                # Add agent response to client's context
-                client_messages.append({"role": "user", "content": agent_content})
+                # Add agent response to client's context (only if visible to client)
+                # For handoffs, only the final agent response should be visible to client
+                client_visible_messages = self._get_client_visible_messages(conversation_history)
+                if client_visible_messages:
+                    # Use the last visible message for client context
+                    last_visible_content = client_visible_messages[-1]
+                    client_messages.append({"role": "user", "content": last_visible_content})
                 
                 # Check if we've reached max turns
                 if turn_number >= max_turns:
@@ -743,6 +719,7 @@ class ConversationEngine:
                                 "speaker": "client",
                                 "content": f"[ЗАВЕРШИЛ ЗВОНОК: {end_reason}]",
                                 "tool_calls": client_tool_calls,
+                                "visible_to_client": True,
                                 "timestamp": datetime.now().isoformat()
                             })
                             break
@@ -769,12 +746,12 @@ class ConversationEngine:
                         "turn": turn_number,
                         "speaker": "client",
                         "content": client_content,
+                        "visible_to_client": True,
                         "timestamp": datetime.now().isoformat()
                     })
                 
                 # Add client response to agent's context
-                agent_messages.append({"role": "assistant", "content": agent_content})
-                agent_messages.append({"role": "user", "content": client_content})
+                self._current_agent_messages.append({"role": "user", "content": client_content})
                 
                 # Add client response to client's context for next turn
                 client_messages.append({"role": "assistant", "content": client_content})
@@ -853,4 +830,147 @@ class ConversationEngine:
                 'tools_used': True,
                 'error_context': error_context
             }
+
+    async def _handle_handoff_flow(self, tool_calls: List[Dict[str, Any]], agent_response_content: str, 
+                                  session_id: str, turn_number: int, variables: Dict[str, Any],
+                                  conversation_history: List[Dict[str, Any]] = None) -> Tuple[str, List[Dict[str, Any]]]:
+        """
+        Handle agent handoff flow without exposing tool calls to client.
+        Returns the new agent's response and conversation entries to add to history.
+        """
+        conversation_entries = []
+        
+        # Process tool calls to check for handoffs
+        tool_responses, new_current_agent = await self._handle_tool_calls(tool_calls, session_id)
+        
+        # Add the original agent's message with tool calls (hidden from client)
+        conversation_entries.append({
+            "turn": turn_number,
+            "speaker": f"agent_{self.current_agent}",
+            "content": agent_response_content,
+            "tool_calls": tool_calls,
+            "tool_results": [self._safe_parse_tool_result(response["content"]) for response in tool_responses],
+            "visible_to_client": False,  # Hide handoff tool calls from client
+            "handoff_metadata": {
+                "is_handoff": bool(new_current_agent),
+                "from_agent": self.current_agent if new_current_agent else None,
+                "to_agent": new_current_agent
+            },
+            "timestamp": datetime.now().isoformat()
+        })
+        
+        # Handle agent handoff if needed
+        if new_current_agent and new_current_agent != self.current_agent:
+            # Log the handoff
+            self.logger.log_info(f"Processing handoff from {self.current_agent} to {new_current_agent}", extra_data={
+                'session_id': session_id,
+                'turn_number': turn_number,
+                'previous_agent': self.current_agent,
+                'new_agent': new_current_agent
+            })
+            
+            # Update agent messages with tool responses
+            agent_messages = getattr(self, '_current_agent_messages', [])
+            agent_messages.append({
+                "role": "assistant",
+                "content": agent_response_content or "",
+                "tool_calls": tool_calls
+            })
+            agent_messages.extend(tool_responses)
+            
+            # Save current agent context
+            self.agent_contexts[self.current_agent] = agent_messages.copy()
+            
+            # Switch to new agent
+            self.current_agent = new_current_agent
+            
+            # Initialize new agent context if not exists
+            if new_current_agent not in self.agent_contexts:
+                new_agent_spec = self.prompt_specification.get_agent_prompt(new_current_agent)
+                if new_agent_spec:
+                    new_agent_system_prompt = self._format_prompt(new_agent_spec.prompt, variables, session_id)
+                    self.agent_contexts[new_current_agent] = [{"role": "system", "content": new_agent_system_prompt}]
+            
+            # Use new agent's context
+            agent_messages = self.agent_contexts[new_current_agent].copy()
+            
+            # Update tools for new agent
+            new_agent_spec = self.prompt_specification.get_agent_prompt(new_current_agent)
+            if new_agent_spec:
+                agent_tools = new_agent_spec.get_tool_schemas()
+            else:
+                agent_tools = []
+            
+            # Add context from previous conversation for new agent
+            # Get recent client messages for context
+            if conversation_history:
+                recent_client_messages = [entry for entry in conversation_history[-5:] 
+                                        if entry.get('speaker') == 'client' and entry.get('visible_to_client', True)]
+            else:
+                recent_client_messages = []
+            
+            if recent_client_messages:
+                last_client_message = recent_client_messages[-1]['content']
+                agent_messages.append({"role": "user", "content": last_client_message})
+            
+            # Add handoff context message
+            handoff_message = f"You are now taking over this conversation. The previous agent has transferred the customer to you."
+            agent_messages.append({"role": "user", "content": handoff_message})
+            
+            # Get new agent's response
+            self.logger.log_info(f"Getting response from new agent {new_current_agent}", extra_data={
+                'session_id': session_id,
+                'message_count': len(agent_messages)
+            })
+            
+            new_agent_response, _ = await self.openai.chat_completion(
+                messages=agent_messages,
+                session_id=session_id,
+                tools=agent_tools,
+                seed=variables.get('SEED')
+            )
+            
+            new_agent_content = new_agent_response.content if hasattr(new_agent_response, 'content') else str(new_agent_response)
+            if not new_agent_content:
+                new_agent_content = ""
+            
+            # Update the current agent messages for next iteration
+            self._current_agent_messages = agent_messages
+            self._current_agent_messages.append({"role": "assistant", "content": new_agent_content})
+            
+            # Log new agent's response
+            self.logger.log_conversation_turn(
+                session_id=session_id,
+                turn_number=turn_number,
+                role=f"agent_{self.current_agent}_handoff_response",
+                content=new_agent_content
+            )
+            
+            # Add new agent's response (visible to client)
+            conversation_entries.append({
+                "turn": turn_number,
+                "speaker": f"agent_{self.current_agent}",
+                "content": new_agent_content,
+                "visible_to_client": True,  # This is what client sees
+                "handoff_metadata": {
+                    "is_handoff_response": True,
+                    "responding_agent": new_current_agent
+                },
+                "timestamp": datetime.now().isoformat()
+            })
+            
+            return new_agent_content, conversation_entries
+        else:
+            # No handoff occurred, return original content
+            # Update visibility for non-handoff tool calls
+            conversation_entries[0]["visible_to_client"] = True
+            return agent_response_content, conversation_entries
+
+    def _get_client_visible_messages(self, conversation_history: List[Dict[str, Any]]) -> List[str]:
+        """Extract messages that should be visible to the client"""
+        visible_messages = []
+        for entry in conversation_history:
+            if entry.get('visible_to_client', True) and entry.get('speaker', '').startswith('agent'):
+                visible_messages.append(entry['content'])
+        return visible_messages
 
