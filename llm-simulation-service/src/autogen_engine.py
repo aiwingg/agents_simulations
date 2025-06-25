@@ -4,13 +4,14 @@ from datetime import datetime
 from typing import Dict, Any, Optional, List
 import uuid
 
-from autogen import AssistantAgent, UserProxyAgent, GroupChat, GroupChatManager
+from autogen import AssistantAgent, UserProxyAgent
+from autogen.agentchat.contrib.swarm_agent import a_initiate_swarm_chat
 
 from src.prompt_specification import PromptSpecificationManager
 from src.config import Config
 
 class AutoGenConversationEngine:
-    """Conversation engine utilizing AutoGen group chat"""
+    """Conversation engine utilizing AutoGen swarm chat"""
 
     def __init__(self, prompt_spec_name: str = "default_prompts") -> None:
         self.prompt_manager = PromptSpecificationManager()
@@ -49,19 +50,23 @@ class AutoGenConversationEngine:
         session_id = str(uuid.uuid4())
         agents = self._create_agents(variables)
 
-        groupchat = GroupChat(agents=agents, messages=[], max_round=max_turns)
-        manager = GroupChatManager(groupchat=groupchat, llm_config=self.llm_config)
         user_proxy = UserProxyAgent("user_proxy")
-        manager.register_reply([user_proxy])
 
         start_message = variables.get("start_message", "Начало разговора")
         start_time = datetime.now()
-        await asyncio.to_thread(manager.run, {"user_input": start_message})
+
+        chat_result, _, _ = await a_initiate_swarm_chat(
+            initial_agent=agents[0],
+            messages=start_message,
+            agents=agents,
+            user_agent=user_proxy,
+            max_rounds=max_turns,
+        )
         end_time = datetime.now()
 
         history = []
         turn = 1
-        for msg in groupchat.messages:
+        for msg in chat_result.chat_history:
             if msg.get("role") in ["assistant", "user"]:
                 speaker = msg.get("name") or msg.get("role")
                 history.append({
