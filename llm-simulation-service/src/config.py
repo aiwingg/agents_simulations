@@ -21,6 +21,9 @@ class Config:
     CONCURRENCY: int = int(os.getenv('CONCURRENCY', '4'))
     USE_TOOLS: bool = os.getenv('USE_TOOLS', 'True').lower() == 'true'
     
+    # Empty Response Handling
+    NUM_RETRIES_IF_EMPTY: int = int(os.getenv('NUM_RETRIES_IF_EMPTY', '3'))
+    
     # Webhook Configuration
     WEBHOOK_URL: str = os.getenv('WEBHOOK_URL', '')
     

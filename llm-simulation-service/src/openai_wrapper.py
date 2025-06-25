@@ -5,6 +5,7 @@ import asyncio
 import json
 import time
 import uuid
+import os
 from typing import Dict, List, Optional, Any, Tuple
 from openai import AsyncOpenAI
 from asyncio_throttle import Throttler
@@ -12,13 +13,32 @@ import random
 from src.config import Config
 from src.logging_utils import get_logger
 
+# Braintrust imports
+from braintrust import init_logger, wrap_openai, traced
+
 class OpenAIWrapper:
     """Wrapper for OpenAI API with retry logic and rate limiting"""
     
     def __init__(self, api_key: str, model: str = None, max_retries: int = 3):
+        # Initialize OpenAI client
         self.client = AsyncOpenAI(api_key=api_key)
+        
+        # Initialize Braintrust
+        braintrust_api_key = os.getenv('BRAINTRUST_API_KEY')
+        if not braintrust_api_key:
+            raise ValueError("BRAINTRUST_API_KEY environment variable is required")
+            
+        self.braintrust_logger = init_logger(
+            project="LLM Simulation Service",
+            api_key=braintrust_api_key
+        )
+        # Wrap OpenAI client with Braintrust
+        self.client = wrap_openai(self.client)
+        print("✅ Braintrust logging initialized successfully")
+            
         self.model = model or Config.OPENAI_MODEL
         self.max_retries = max_retries
+        self.empty_retries = Config.NUM_RETRIES_IF_EMPTY
         self.throttler = Throttler(rate_limit=200, period=1)  # 200 requests per second
         self.logger = get_logger()
         
@@ -31,6 +51,7 @@ class OpenAIWrapper:
             'gpt-3.5-turbo': {'input': 0.0015, 'output': 0.002}
         }
     
+    @traced
     async def _make_request_with_retry(self, messages: List[Dict[str, str]], 
                                      session_id: str, 
                                      temperature: float = 0.7,
@@ -53,6 +74,8 @@ class OpenAIWrapper:
             tools=tools,
             response_format=response_format
         )
+        
+        empty_retry_count = 0
         
         for attempt in range(self.max_retries):
             request_start_time = time.time()
@@ -90,6 +113,35 @@ class OpenAIWrapper:
                         content = message  # Return full message object with tool_calls
                     else:
                         content = message.content
+                    
+                    # Check for empty response (no content and no tool calls)
+                    has_tool_calls = tools and hasattr(message, 'tool_calls') and message.tool_calls
+                    if not content and not has_tool_calls:
+                        # Empty response - check if we should retry
+                        empty_retry_count += 1
+                            
+                        if empty_retry_count <= self.empty_retries:
+                            self.logger.log_warning(
+                                f"Empty response received (attempt {empty_retry_count}/{self.empty_retries}), retrying...",
+                                extra_data={
+                                    'session_id': session_id,
+                                    'request_id': request_id,
+                                    'attempt': attempt + 1,
+                                    'empty_retry': empty_retry_count
+                                }
+                            )
+                            # Continue to next attempt in the outer retry loop
+                            continue
+                        else:
+                            # Exhausted empty retries
+                            error_msg = f"Agent returned empty responses after {self.empty_retries} retries"
+                            self.logger.log_error(error_msg, extra_data={
+                                'session_id': session_id,
+                                'request_id': request_id,
+                                'empty_retries': self.empty_retries
+                            })
+                            raise Exception(error_msg)
+                    
                     usage = {
                         'prompt_tokens': response.usage.prompt_tokens,
                         'completion_tokens': response.usage.completion_tokens,
@@ -197,6 +249,7 @@ class OpenAIWrapper:
         
         return input_cost + output_cost
     
+    @traced
     async def chat_completion(self, messages: List[Dict[str, str]], 
                             session_id: str,
                             temperature: float = 0.7,
@@ -211,6 +264,7 @@ class OpenAIWrapper:
             tools=tools
         )
     
+    @traced
     async def json_completion(self, messages: List[Dict[str, str]], 
                             session_id: str,
                             temperature: float = 0.3,

@@ -4,6 +4,7 @@ Core conversation engine for LLM simulation
 import asyncio
 import json
 import time
+import os
 from typing import Dict, List, Any, Optional, Tuple
 from datetime import datetime
 from src.config import Config
@@ -14,6 +15,9 @@ from src.logging_utils import get_logger
 from src.prompt_specification import PromptSpecificationManager, SystemPromptSpecification
 from src.tools_specification import ToolsSpecification
 from jinja2 import Environment, BaseLoader, Template, StrictUndefined, DebugUndefined, UndefinedError
+
+# Braintrust imports
+from braintrust import traced
 
 class ConversationEngine:
     """Core engine for managing conversations between Agent-LLM and Client-LLM with multi-agent support"""
@@ -147,6 +151,7 @@ class ConversationEngine:
                 
         return variables, webhook_session_id
 
+    @traced
     async def run_conversation(self, scenario: Dict[str, Any], max_turns: Optional[int] = None, timeout_sec: Optional[int] = None) -> Dict[str, Any]:
         """Run a complete conversation simulation"""
         
@@ -452,6 +457,7 @@ class ConversationEngine:
             self.logger.log_error(f"Unexpected error parsing tool result: {content}", exception=e)
             return content
     
+    @traced
     async def run_conversation_with_tools(self, scenario: Dict[str, Any], max_turns: Optional[int] = None, timeout_sec: Optional[int] = None) -> Dict[str, Any]:
         """Run conversation with tool calling support"""
         
@@ -831,6 +837,7 @@ class ConversationEngine:
                 'error_context': error_context
             }
 
+    @traced
     async def _handle_handoff_flow(self, tool_calls: List[Dict[str, Any]], agent_response_content: str, 
                                   session_id: str, turn_number: int, variables: Dict[str, Any],
                                   conversation_history: List[Dict[str, Any]] = None) -> Tuple[str, List[Dict[str, Any]]]:
@@ -901,21 +908,13 @@ class ConversationEngine:
             else:
                 agent_tools = []
             
-            # Add context from previous conversation for new agent
-            # Get recent client messages for context
+            # Add full conversation history in OpenAI format (including handoffs)
             if conversation_history:
-                recent_client_messages = [entry for entry in conversation_history[-5:] 
-                                        if entry.get('speaker') == 'client' and entry.get('visible_to_client', True)]
-            else:
-                recent_client_messages = []
-            
-            if recent_client_messages:
-                last_client_message = recent_client_messages[-1]['content']
-                agent_messages.append({"role": "user", "content": last_client_message})
-            
-            # Add handoff context message
-            handoff_message = f"You are now taking over this conversation. The previous agent has transferred the customer to you."
-            agent_messages.append({"role": "user", "content": handoff_message})
+                conversation_messages = self._convert_conversation_to_openai_format(
+                    conversation_history, 
+                    exclude_handoff_tools=False  # Include handoffs so agent sees full context
+                )
+                agent_messages.extend(conversation_messages)
             
             # Get new agent's response
             self.logger.log_info(f"Getting response from new agent {new_current_agent}", extra_data={
@@ -973,4 +972,68 @@ class ConversationEngine:
             if entry.get('visible_to_client', True) and entry.get('speaker', '').startswith('agent'):
                 visible_messages.append(entry['content'])
         return visible_messages
+
+    @traced
+    def _convert_conversation_to_openai_format(self, conversation_history: List[Dict[str, Any]], 
+                                              exclude_handoff_tools: bool = True) -> List[Dict[str, str]]:
+        """
+        Convert conversation history to OpenAI message format.
+        
+        Args:
+            conversation_history: List of conversation entries
+            exclude_handoff_tools: Whether to exclude handoff tool calls from the format
+        
+        Returns:
+            List of messages in OpenAI format
+        """
+        messages = []
+        
+        for entry in conversation_history:
+            speaker = entry.get('speaker', '')
+            content = entry.get('content', '')
+            tool_calls = entry.get('tool_calls', [])
+            
+            # Skip empty content entries
+            if not content and not tool_calls:
+                continue
+                
+            # Handle agent messages
+            if speaker.startswith('agent_'):
+                # Check if this is a handoff tool call that should be excluded
+                if exclude_handoff_tools and tool_calls:
+                    has_handoff = any(
+                        call.get('function', {}).get('name', '').startswith('handoff_')
+                        for call in tool_calls
+                    )
+                    if has_handoff and not content:
+                        # Skip empty handoff tool call messages
+                        continue
+                
+                # Add content if available
+                if content:
+                    messages.append({
+                        "role": "assistant",
+                        "content": content
+                    })
+                # If no content but has tool calls (and we're not excluding handoffs), add tool call info
+                elif tool_calls and not exclude_handoff_tools:
+                    tool_descriptions = []
+                    for call in tool_calls:
+                        func_name = call.get('function', {}).get('name', 'unknown')
+                        tool_descriptions.append(f"[Used tool: {func_name}]")
+                    
+                    messages.append({
+                        "role": "assistant", 
+                        "content": " ".join(tool_descriptions)
+                    })
+                    
+            # Handle client messages
+            elif speaker == 'client':
+                if content:  # Only add if there's actual content
+                    messages.append({
+                        "role": "user", 
+                        "content": content
+                    })
+        
+        return messages
 
