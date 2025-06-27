@@ -10,7 +10,9 @@ from datetime import datetime
 
 # AutoGen imports
 from autogen_agentchat.teams import Swarm
-from autogen_agentchat.messages import HandoffMessage
+from autogen_agentchat.messages import HandoffMessage, TextMessage
+from autogen_agentchat.agents import AssistantAgent
+from autogen_agentchat.base import TaskResult
 from autogen_ext.models.openai import OpenAIChatCompletionClient
 
 # Existing infrastructure
@@ -206,10 +208,47 @@ class AutogenConversationEngine:
             
         return result
 
+    def _create_user_agent(self, model_client: OpenAIChatCompletionClient, variables: Dict[str, Any]) -> AssistantAgent:
+        """
+        Create AssistantAgent for realistic user simulation.
+        
+        Args:
+            model_client: OpenAI client for the user simulation agent
+            variables: Scenario variables for context
+            
+        Returns:
+            Configured AssistantAgent for user simulation
+        """
+        # Create system message for user simulation based on variables
+        user_context = []
+        if variables.get('CLIENT_NAME'):
+            user_context.append(f"You are {variables['CLIENT_NAME']}")
+        if variables.get('LOCATION'):
+            user_context.append(f"located in {variables['LOCATION']}")
+        if variables.get('PURCHASE_HISTORY'):
+            user_context.append(f"Purchase history: {variables['PURCHASE_HISTORY']}")
+            
+        user_system_message = f"""You are simulating a customer in a conversation with customer service agents. 
+        {'. '.join(user_context) if user_context else 'You are a typical customer.'}
+        
+        Respond naturally and realistically as a customer would. Be conversational, ask questions when needed, 
+        and respond appropriately to the agents' suggestions and information. Keep responses concise but natural.
+        
+        Don't mention that you are simulating anything - stay in character as a real customer."""
+        
+        user_agent = AssistantAgent(
+            name="user_agent",
+            model_client=model_client,
+            system_message=user_system_message
+        )
+        
+        return user_agent
+
     @traced(name="autogen_run_conversation_with_tools")
     async def run_conversation_with_tools(self, scenario: Dict[str, Any], max_turns: Optional[int] = None, timeout_sec: Optional[int] = None) -> Dict[str, Any]:
         """
         Run conversation simulation with tool calling and multi-agent handoff support using AutoGen Swarm.
+        Uses external UserProxy for user simulation and proper conversation loop.
         
         Args:
             scenario: Dictionary containing scenario name and variables
@@ -248,10 +287,15 @@ class AutogenConversationEngine:
         })
         
         start_time = time.time()
+        all_messages = []  # Track all conversation messages
+        turn_count = 0
         
         try:
             # Create AutoGen model client from OpenAIWrapper
             model_client = self._create_autogen_client()
+            
+            # Create user simulation agent
+            user_agent = self._create_user_agent(model_client, variables)
             
             # Create session-isolated tool factory
             tool_factory = AutogenToolFactory(session_id)
@@ -264,17 +308,16 @@ class AutogenConversationEngine:
             # Create tools for all agents (session-isolated)
             tools = tool_factory.get_tools_for_agent(list(all_tool_names))
             
-            # Create AutoGen Swarm team
+            # Create AutoGen Swarm team (without user as participant)
             mas_factory = AutogenMASFactory(session_id)
             swarm = mas_factory.create_swarm_team(
                 system_prompt_spec=self.prompt_specification,
                 tools=tools,
                 model_client=model_client,
-                user_handoff_target="client"
+                user_handoff_target="client"  # This is now ignored
             )
             
             # Prepare initial task based on system prompt spec
-            # We simulate the client greeting to start the conversation
             initial_task = "Добрый день!" # Default greeting
             
             # If there's a specific client prompt or greeting in variables, use that
@@ -283,34 +326,99 @@ class AutogenConversationEngine:
             elif 'GREETING' in variables:
                 initial_task = variables['GREETING']
             
-            self.logger.log_info(f"Starting AutoGen Swarm conversation", extra_data={
+            self.logger.log_info(f"Starting AutoGen conversation loop", extra_data={
                 'session_id': session_id,
                 'initial_task': initial_task,
                 'agents_count': len(self.prompt_specification.agents),
-                'tools_count': len(tools)
+                'tools_count': len(tools),
+                'max_turns': max_turns
             })
             
-            # Run conversation with timeout
+            # Conversation loop with timeout for entire conversation
             try:
-                # Use asyncio.wait_for to enforce timeout_sec
-                task_result = await asyncio.wait_for(
-                    swarm.run_stream(task=initial_task),
-                    timeout=timeout_sec
-                )
+                # Start timeout for entire conversation
+                conversation_start = time.time()
+                current_user_message = initial_task
+                last_active_agent = "agent_agent"  # Default first agent
+                
+                while turn_count < max_turns:
+                    # Check timeout for entire conversation
+                    if time.time() - conversation_start > timeout_sec:
+                        raise asyncio.TimeoutError(f"Conversation timeout after {timeout_sec} seconds")
+                    
+                    turn_count += 1
+                    
+                    self.logger.log_info(f"Turn {turn_count}: User -> {last_active_agent}", extra_data={
+                        'session_id': session_id,
+                        'user_message': current_user_message[:100],
+                        'target_agent': last_active_agent
+                    })
+                    
+                    # Run swarm with current user message
+                    task_result = await swarm.run_stream(
+                        task=HandoffMessage(source="client", target=last_active_agent, content=current_user_message)
+                    )
+                    
+                    # Add all swarm messages to conversation history
+                    all_messages.extend(task_result.messages)
+                    
+                    # Get last message from MAS (should be TextMessage)
+                    last_message = task_result.messages[-1]
+                    if not isinstance(last_message, TextMessage):
+                        self.logger.log_warning(f"Expected TextMessage, got {type(last_message)}")
+                        break
+                    
+                    # Update last active agent for next iteration
+                    last_active_agent = last_message.source
+                    
+                    self.logger.log_info(f"Turn {turn_count}: {last_active_agent} -> User", extra_data={
+                        'session_id': session_id,
+                        'agent_response': last_message.content[:100],
+                        'stop_reason': task_result.stop_reason
+                    })
+                    
+                    # Check if conversation naturally ended
+                    if task_result.stop_reason and task_result.stop_reason != "max_turns":
+                        self.logger.log_info(f"Conversation ended naturally: {task_result.stop_reason}")
+                        break
+                    
+                    # If we've reached max turns, break
+                    if turn_count >= max_turns:
+                        self.logger.log_info(f"Reached max_turns ({max_turns})")
+                        break
+                    
+                    # Get user response via user simulation agent
+                    user_response = await user_agent.on_messages([last_message], None)
+                    current_user_message = user_response.chat_message.content
+                    
+                    # Add user response to conversation history as a client message
+                    user_message = TextMessage(content=current_user_message, source="client")
+                    all_messages.append(user_message)
+                    
+                    self.logger.log_info(f"User simulation agent generated response", extra_data={
+                        'session_id': session_id,
+                        'user_response': current_user_message[:100]
+                    })
                 
                 end_time = time.time()
                 duration = end_time - start_time
                 
-                self.logger.log_info(f"AutoGen Swarm conversation completed", extra_data={
+                self.logger.log_info(f"AutoGen conversation loop completed", extra_data={
                     'session_id': session_id,
                     'duration': duration,
-                    'stop_reason': task_result.stop_reason,
-                    'messages_count': len(task_result.messages)
+                    'total_turns': turn_count,
+                    'messages_count': len(all_messages)
                 })
                 
-                # Convert AutoGen TaskResult to contract format using ConversationAdapter
+                # Create a synthetic TaskResult for ConversationAdapter
+                synthetic_result = TaskResult(
+                    messages=all_messages,
+                    stop_reason=f"completed_{turn_count}_turns"
+                )
+                
+                # Convert to contract format using ConversationAdapter
                 result = ConversationAdapter.autogen_to_contract_format(
-                    task_result=task_result,
+                    task_result=synthetic_result,
                     session_id=session_id,
                     scenario_name=scenario_name,
                     duration=duration,
@@ -334,7 +442,8 @@ class AutogenConversationEngine:
                     'session_id': session_id,
                     'timeout_sec': timeout_sec,
                     'actual_duration': duration,
-                    'scenario_name': scenario_name
+                    'scenario_name': scenario_name,
+                    'completed_turns': turn_count
                 })
                 
                 # Return timeout result in contract format
@@ -344,7 +453,7 @@ class AutogenConversationEngine:
                     'status': 'failed',
                     'error': f'Conversation timeout after {timeout_sec} seconds',
                     'error_type': 'TimeoutError',
-                    'total_turns': 0,
+                    'total_turns': turn_count,
                     'duration_seconds': duration,
                     'conversation_history': [],
                     'start_time': datetime.fromtimestamp(start_time).isoformat(),
@@ -363,6 +472,7 @@ class AutogenConversationEngine:
                 'duration_so_far': duration,
                 'max_turns': max_turns,
                 'timeout_sec': timeout_sec,
+                'completed_turns': turn_count,
                 'error_type': type(e).__name__,
                 'spec_name': self.prompt_spec_name
             }
@@ -384,14 +494,14 @@ class AutogenConversationEngine:
                     'status': 'failed_api_blocked',
                     'error': 'OpenAI API blocked due to geographic restrictions',
                     'error_type': 'APIBlockedError',
-                    'total_turns': 0,
+                    'total_turns': turn_count,
                     'duration_seconds': duration,
                     'tools_used': True,
                     'conversation_history': [],
                     'start_time': datetime.fromtimestamp(start_time).isoformat(),
                     'end_time': datetime.fromtimestamp(end_time).isoformat(),
                     'graceful_degradation': True,
-                    'partial_completion': False
+                    'partial_completion': turn_count > 0
                 }
             else:
                 self.logger.log_error(f"AutoGen conversation with tools failed: {str(e)}", 
@@ -403,7 +513,7 @@ class AutogenConversationEngine:
                 'status': 'failed',
                 'error': str(e),
                 'error_type': type(e).__name__,
-                'total_turns': 0,
+                'total_turns': turn_count,
                 'duration_seconds': duration,
                 'tools_used': True,
                 'conversation_history': [],

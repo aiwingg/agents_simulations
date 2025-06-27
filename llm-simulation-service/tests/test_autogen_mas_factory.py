@@ -48,11 +48,11 @@ class TestAutogenMASFactory:
         assert 'sales_agent' in handoff_config
         assert 'support_agent' in handoff_config
         
-        # Each agent should have handoffs to other agents plus client
+        # Each agent should have handoffs to other agents only (no client - user is external)
         assert 'support_agent' in handoff_config['sales_agent']
-        assert 'client' in handoff_config['sales_agent']
+        assert 'client' not in handoff_config['sales_agent']  # User is external now
         assert 'sales_agent' in handoff_config['support_agent'] 
-        assert 'client' in handoff_config['support_agent']
+        assert 'client' not in handoff_config['support_agent']  # User is external now
         
     def test_create_termination_conditions(self):
         """Test termination conditions creation"""
@@ -128,7 +128,7 @@ class TestAutogenMASFactory:
         mock_agent_class.assert_called_once_with(
             name='test_agent',
             model_client=mock_model_client,
-            handoffs=['client'],  # Should include client handoff
+            handoffs=[],  # No handoffs since no other agents and user is external
             tools=[mock_tool],
             system_message='You are a test agent',
             description='Test agent description'

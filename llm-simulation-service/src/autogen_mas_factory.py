@@ -5,7 +5,7 @@ Creates AutoGen Swarm teams from SystemPromptSpecification with proper configura
 from typing import List, Dict, Any, Optional
 from autogen_agentchat.agents import AssistantAgent
 from autogen_agentchat.teams import Swarm
-from autogen_agentchat.conditions import HandoffTermination, TextMentionTermination
+from autogen_agentchat.conditions import TextMessageTermination
 from autogen_ext.models.openai import OpenAIChatCompletionClient
 from autogen_core.tools import BaseTool
 
@@ -122,7 +122,7 @@ class AutogenMASFactory:
         """
         agents = []
         
-        # Setup handoff relationships: agent-to-agent + ALL agents can handoff to user_handoff_target
+        # Setup handoff relationships: agent-to-agent only (no user handoffs)
         handoff_config = self._setup_agent_handoffs(agents_config, user_handoff_target)
         
         # Create tool mapping for efficient lookup
@@ -168,14 +168,14 @@ class AutogenMASFactory:
         user_handoff_target: str
     ) -> Dict[str, List[str]]:
         """
-        Configures handoff relationships: agent-to-agent + ALL agents can handoff to user_handoff_target
+        Configures handoff relationships: agent-to-agent only (no user handoffs)
         
         Args:
             agents_config: Dictionary of agent configurations
-            user_handoff_target: Target name for user handoffs (e.g., "client")
+            user_handoff_target: Target name for user handoffs (ignored in new implementation)
             
         Returns:
-            Dictionary mapping agent_name -> list of handoff targets
+            Dictionary mapping agent_name -> list of handoff targets (agents only)
         """
         handoff_config = {}
         
@@ -192,39 +192,32 @@ class AutogenMASFactory:
                             f"Agent '{agent_name}' has handoff to non-existent agent: '{target_agent}'"
                         )
             
-            # ALL agents can handoff to user_handoff_target
-            if user_handoff_target not in handoffs:
-                handoffs.append(user_handoff_target)
-            
+            # NOTE: Removed user handoff target since user is now external to MAS
             handoff_config[agent_name] = handoffs
         
         self.logger.log_info(f"Configured handoffs for session {self.session_id}", extra_data={
             'handoff_config': handoff_config,
-            'user_handoff_target': user_handoff_target
+            'user_external': True
         })
         
         return handoff_config
     
     def _create_termination_conditions(self, user_handoff_target: str):
         """
-        Creates HandoffTermination(target=user_handoff_target) | TextMentionTermination("TERMINATE")
+        Creates TextMessageTermination only since user is external to MAS
         
         Args:
-            user_handoff_target: Target for user handoffs
+            user_handoff_target: Target for user handoffs (ignored in new implementation)
             
         Returns:
-            Combined termination condition for the Swarm
+            TextMessageTermination condition for the Swarm
         """
-        # Create termination conditions
-        handoff_termination = HandoffTermination(target=user_handoff_target)
-        text_termination = TextMentionTermination("TERMINATE")
-        
-        # Combine with OR logic
-        termination = handoff_termination | text_termination
+        # Only use TextMessageTermination since user is external
+        termination = TextMessageTermination()
         
         self.logger.log_info(f"Created termination conditions for session {self.session_id}", extra_data={
-            'user_handoff_target': user_handoff_target,
-            'conditions': ['HandoffTermination', 'TextMentionTermination']
+            'user_external': True,
+            'conditions': ['TextMessageTermination']
         })
         
         return termination

@@ -187,14 +187,18 @@ class TestAutogenConversationEngine:
         
         # Mock all dependencies
         with patch.object(self.engine, '_create_autogen_client') as mock_create_client, \
+             patch.object(self.engine, '_create_user_agent') as mock_create_user_agent, \
              patch('src.autogen_conversation_engine.AutogenToolFactory') as mock_tool_factory_class, \
              patch('src.autogen_conversation_engine.AutogenMASFactory') as mock_mas_factory_class, \
-             patch('src.autogen_conversation_engine.ConversationAdapter') as mock_adapter_class, \
-             patch('asyncio.wait_for') as mock_wait_for:
+             patch('src.autogen_conversation_engine.ConversationAdapter') as mock_adapter_class:
             
             # Setup mocks
             mock_client = Mock()
             mock_create_client.return_value = mock_client
+            
+            # Mock user agent  
+            mock_user_agent = Mock()
+            mock_create_user_agent.return_value = mock_user_agent
             
             mock_tool_factory = Mock()
             mock_tools = [Mock()]
@@ -203,9 +207,14 @@ class TestAutogenConversationEngine:
             
             mock_mas_factory = Mock()
             mock_swarm = Mock()
+            
+            # Create mock messages for the conversation
+            from autogen_agentchat.messages import TextMessage
+            mock_agent_message = TextMessage(content="Hello! How can I help you?", source="agent_agent")
+            
             mock_task_result = Mock()
-            mock_task_result.stop_reason = "handoff_to_client"
-            mock_task_result.messages = []
+            mock_task_result.stop_reason = "completed_1_turns"  # Natural completion after 1 turn
+            mock_task_result.messages = [mock_agent_message]
             mock_swarm.run_stream = AsyncMock(return_value=mock_task_result)
             mock_mas_factory.create_swarm_team.return_value = mock_swarm
             mock_mas_factory_class.return_value = mock_mas_factory
@@ -219,8 +228,7 @@ class TestAutogenConversationEngine:
             }
             mock_adapter_class.autogen_to_contract_format.return_value = mock_adapter_result
             
-            # Mock wait_for to return the task result
-            mock_wait_for.return_value = mock_task_result
+            # Mock wait_for is not used in new implementation - remove this
             
             # Mock enrich_variables to return session_id
             with patch.object(self.engine, '_enrich_variables_with_client_data') as mock_enrich:
@@ -233,7 +241,15 @@ class TestAutogenConversationEngine:
             mock_tool_factory_class.assert_called_once_with('test_session_123')
             mock_mas_factory_class.assert_called_once_with('test_session_123')
             mock_mas_factory.create_swarm_team.assert_called_once()
-            mock_swarm.run_stream.assert_called_once_with(task="Добрый день!")
+            
+            # Verify run_stream was called with HandoffMessage (not string)
+            assert mock_swarm.run_stream.call_count >= 1
+            call_args = mock_swarm.run_stream.call_args_list[0]
+            handoff_message = call_args[1]['task']  # keyword argument
+            assert handoff_message.source == "client"
+            assert handoff_message.target == "agent_agent" 
+            assert handoff_message.content == "Добрый день!"
+            
             mock_adapter_class.autogen_to_contract_format.assert_called_once()
             
             # Verify result
@@ -248,13 +264,17 @@ class TestAutogenConversationEngine:
         }
         
         with patch.object(self.engine, '_create_autogen_client') as mock_create_client, \
+             patch.object(self.engine, '_create_user_agent') as mock_create_user_agent, \
              patch('src.autogen_conversation_engine.AutogenToolFactory') as mock_tool_factory_class, \
-             patch('src.autogen_conversation_engine.AutogenMASFactory') as mock_mas_factory_class, \
-             patch('asyncio.wait_for') as mock_wait_for:
+             patch('src.autogen_conversation_engine.AutogenMASFactory') as mock_mas_factory_class:
             
             # Setup mocks to simulate timeout
             mock_client = Mock()
             mock_create_client.return_value = mock_client
+            
+            # Mock user agent  
+            mock_user_agent = Mock()
+            mock_create_user_agent.return_value = mock_user_agent
             
             mock_tool_factory = Mock()
             mock_tools = [Mock()]
@@ -266,12 +286,17 @@ class TestAutogenConversationEngine:
             mock_mas_factory.create_swarm_team.return_value = mock_swarm
             mock_mas_factory_class.return_value = mock_mas_factory
             
-            # Mock timeout exception
-            mock_wait_for.side_effect = asyncio.TimeoutError()
-            
+            # Simulate timeout by mocking time.time() to advance quickly
             # Mock enrich_variables to return session_id
-            with patch.object(self.engine, '_enrich_variables_with_client_data') as mock_enrich:
+            with patch.object(self.engine, '_enrich_variables_with_client_data') as mock_enrich, \
+                 patch('time.time') as mock_time:
+                
                 mock_enrich.return_value = ({'CLIENT_NAME': 'John'}, None)
+                
+                # Mock time.time() to simulate timeout after first iteration
+                start_time = 1000.0
+                # Need enough time values for all the calls: start_time, conversation_start, timeout check, end_time, etc.
+                mock_time.side_effect = [start_time, start_time, start_time + 15.0, start_time + 15.1, start_time + 15.2]
                 
                 result = await self.engine.run_conversation_with_tools(scenario, timeout_sec=10)
             
@@ -340,14 +365,18 @@ class TestAutogenConversationEngine:
         }
         
         with patch.object(self.engine, '_create_autogen_client') as mock_create_client, \
+             patch.object(self.engine, '_create_user_agent') as mock_create_user_agent, \
              patch('src.autogen_conversation_engine.AutogenToolFactory') as mock_tool_factory_class, \
              patch('src.autogen_conversation_engine.AutogenMASFactory') as mock_mas_factory_class, \
-             patch('src.autogen_conversation_engine.ConversationAdapter') as mock_adapter_class, \
-             patch('asyncio.wait_for') as mock_wait_for:
+             patch('src.autogen_conversation_engine.ConversationAdapter') as mock_adapter_class:
             
             # Setup mocks
             mock_client = Mock()
             mock_create_client.return_value = mock_client
+            
+            # Mock user agent  
+            mock_user_agent = Mock()
+            mock_create_user_agent.return_value = mock_user_agent
             
             mock_tool_factory = Mock()
             mock_tools = [Mock()]
@@ -356,9 +385,14 @@ class TestAutogenConversationEngine:
             
             mock_mas_factory = Mock()
             mock_swarm = Mock()
+            
+            # Create mock messages for the conversation
+            from autogen_agentchat.messages import TextMessage
+            mock_agent_message = TextMessage(content="Hello! How can I help you?", source="agent_agent")
+            
             mock_task_result = Mock()
-            mock_task_result.stop_reason = "completed"
-            mock_task_result.messages = []
+            mock_task_result.stop_reason = "completed_1_turns"  # Natural completion after 1 turn
+            mock_task_result.messages = [mock_agent_message]
             mock_swarm.run_stream = AsyncMock(return_value=mock_task_result)
             mock_mas_factory.create_swarm_team.return_value = mock_swarm
             mock_mas_factory_class.return_value = mock_mas_factory
@@ -369,7 +403,6 @@ class TestAutogenConversationEngine:
                 'status': 'completed'
             }
             mock_adapter_class.autogen_to_contract_format.return_value = mock_adapter_result
-            mock_wait_for.return_value = mock_task_result
             
             # Mock enrich_variables to return webhook session_id
             with patch.object(self.engine, '_enrich_variables_with_client_data') as mock_enrich:
