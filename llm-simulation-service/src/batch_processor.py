@@ -439,6 +439,9 @@ class BatchProcessor:
                     }
                 elif conversation_result.get('status') == 'timeout':
                     # Conversation timed out but may contain partial history
+                    # Still run evaluation to score the partial conversation
+                    evaluation_result = await evaluator.evaluate_conversation(conversation_result)
+
                     combined_result = {
                         'scenario_index': scenario_index,
                         'scenario': scenario_name,
@@ -446,8 +449,12 @@ class BatchProcessor:
                         'status': 'timeout',
                         'error': conversation_result.get('error'),
                         'total_turns': conversation_result.get('total_turns', 0),
-                        'score': 1,
-                        'comment': f"Разговор прерван по таймауту: {conversation_result.get('error')}",
+                        'duration_seconds': conversation_result.get('duration_seconds'),
+                        'score': evaluation_result.get('score'),
+                        'comment': evaluation_result.get('comment'),
+                        'evaluation_status': evaluation_result.get('evaluation_status'),
+                        'start_time': conversation_result.get('start_time'),
+                        'end_time': conversation_result.get('end_time'),
                         'conversation_history': conversation_result.get('conversation_history', [])
                     }
                 else:

@@ -235,6 +235,7 @@ else:
 - Tool call failures: Logged but don't stop conversation
 - Agent handoff failures: Logged with detailed context
 - Timeout and turn limit enforcement returns `status: 'timeout'` with collected history
+  and these partial conversations are still evaluated when running as part of a batch
 
 ### Session Management
 

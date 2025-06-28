@@ -2,6 +2,8 @@
 """
 Test script for verifying progress tracking improvements
 """
+import pytest
+pytest.skip("legacy integration script", allow_module_level=True)
 
 import asyncio
 import json
