@@ -97,6 +97,7 @@ This document provides a comprehensive mapping of all source code modules to the
 ### Result Formats
 Conversation and batch results include a `status` field indicating completion state.
 Possible values are `completed`, `failed`, `failed_api_blocked`, and `timeout`.
+Timeout conversations still receive a score and comment from the evaluator when processed in a batch.
 
 ## Module Dependencies
 
