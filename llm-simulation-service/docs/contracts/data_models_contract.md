@@ -9,4 +9,31 @@ Defined in `src/models/user.py` using SQLAlchemy.
 Stored by `PersistentBatchStorage` as JSON. Fields include `batch_id`, `scenarios`, `status`, timestamps, progress counters and summary data.
 
 ## Conversation Result
-Produced by `ConversationEngine.run_conversation` with keys such as `session_id`, `scenario`, `status`, `total_turns`, `duration_seconds` and `conversation_history`.
+Produced by `ConversationEngine.run_conversation`.
+
+Main keys include:
+- `session_id` – unique ID for the run
+- `scenario` – scenario name
+- `status` – `completed`, `failed`, etc.
+- `total_turns` – number of conversation turns
+- `duration_seconds` – execution time
+- `conversation_history` – list of turn objects
+
+### Conversation History Structure
+Each turn dictionary contains at least the following fields:
+- `turn` – turn number starting at `1`
+- `speaker` – identifier such as `agent_sales_agent` or `client`
+- `speaker_display` – human friendly display name for the speaker
+- `content` – text content of the message
+- `timestamp` – ISO formatted timestamp
+
+#### Example Entry
+```json
+{
+    "turn": 1,
+    "speaker": "agent_sales_agent",
+    "speaker_display": "Sales Agent",
+    "content": "Hello",
+    "timestamp": "2025-06-26T18:07:12.088764"
+}
+```
