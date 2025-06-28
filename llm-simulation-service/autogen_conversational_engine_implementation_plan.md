@@ -12,14 +12,15 @@ This document outlines the architecture and implementation plan for creating a n
 - ✅ **ConversationAdapter** - Service layer for translating AutoGen formats to existing contracts  
 - ✅ **AutogenToolFactory** - Session-isolated tool creation for multi-agent environments
 - ✅ **AutogenConversationEngine** - Main service implementing ConversationEngine contract using AutoGen Swarm
-- ✅ **Comprehensive Test Suites** - All components tested with real AutoGen classes (17 tests passing)
+- ✅ **Comprehensive Test Suites** - All components tested with real AutoGen classes (46 tests passing)
 - ✅ **External User Architecture** - User simulation agent operates outside the MAS for proper conversation flow
 - ✅ **Conversation Loop Implementation** - Agent → User → Agent pattern with proper message handling
 - ✅ **Clean Architecture Refactoring** - Eliminated code duplication and achieved proper layer separation
 - ✅ **Prompt Formatting System** - Immutable prompt specification formatting with Jinja2 variable substitution
+- ✅ **Internal Message Limiting** - Configurable MAS message limits with combined termination conditions and graceful non-text message handling
 
 **Implementation Complete! ✅**
-All core components have been successfully implemented and tested with the correct external user architecture and prompt formatting system.
+All core components have been successfully implemented and tested with the correct external user architecture, prompt formatting system, and internal message limiting for cost control.
 
 ## Architecture Analysis & Challenges
 
@@ -119,8 +120,8 @@ class AutogenMASFactory:
         """Configures handoff relationships: agent-to-agent ONLY (user is external)"""
         # Each agent gets: handoffs=["other_agent1", "other_agent2"] - NO user handoff target
         
-    def _create_termination_conditions(self, user_handoff_target: str) -> TextMessageTermination:
-        """Creates TextMessageTermination only since user is external to MAS"""
+    def _create_termination_conditions(self, max_internal_messages: int) -> TerminationCondition:
+        """Creates combined termination conditions: TextMessageTermination | MaxMessageTermination"""
 ```
 
 **Key Features:**
@@ -128,7 +129,7 @@ class AutogenMASFactory:
 - **NO tool creation** - receives pre-created tools from service layer  
 - Creates AssistantAgent instances with agent-to-agent handoff configuration ONLY
 - ⚠️ **REVISED**: User handoff target is ignored - user is external to MAS
-- Sets up TextMessageTermination only (no HandoffTermination to user)
+- Sets up combined termination conditions: TextMessageTermination | MaxMessageTermination for internal message limiting
 - Pure infrastructure layer - no service logic
 
 ### 3. AutogenConversationEngine (Service Layer) ✅ COMPLETED
@@ -144,6 +145,8 @@ class AutogenMASFactory:
 - ✅ Comprehensive error handling including geographic restrictions
 - ✅ Timeout support with conversation loop and `time.time()` checks
 - ✅ Complete Braintrust tracing integration
+- ✅ Internal message limiting with configurable MAX_INTERNAL_MESSAGES environment variable
+- ✅ Enhanced non-text message handling with graceful error responses and detailed context
 
 **Key Features Implemented:**
 1. **Session Setup**: Extracts session_id from scenario/webhook or generates new one
@@ -157,6 +160,8 @@ class AutogenMASFactory:
 9. **User Simulation**: Creates AssistantAgent using formatted client agent prompt from specification
 10. **Result Transformation**: Converts AutoGen TaskResult to exact contract format via ConversationAdapter
 11. **Error Handling**: Graceful degradation for API blocks, comprehensive error context logging
+12. **Internal Message Limiting**: Loads configurable MAX_INTERNAL_MESSAGES and passes to MAS factory for cost control
+13. **Non-Text Message Recovery**: Enhanced error handling for non-text termination with detailed failure context
 
 **Contract Compliance:**
 - ✅ Identical input/output contracts to existing ConversationEngine
@@ -187,6 +192,57 @@ class ConversationAdapter:
 - Convert AutoGen message format to conversation_history structure
 - Preserve tool_calls and tool_results structure from existing contract
 
+### 5. Internal Message Limiting Configuration ✅ COMPLETED
+
+**Purpose**: Configurable limits for internal Multi-Agent System message generation to prevent unlimited agent conversations and control costs
+
+**Key Components:**
+- **Config.get_max_internal_messages()** - Loads `MAX_INTERNAL_MESSAGES` environment variable with default 10
+- **Combined Termination Conditions** - `TextMessageTermination | MaxMessageTermination` for dual termination criteria
+- **Enhanced Error Handling** - Graceful non-text message termination with detailed error context
+- **Production Safety** - Warning logs if environment variable not set, preventing unlimited internal exchanges
+
+**Architecture:**
+```python
+# Environment variable configuration
+MAX_INTERNAL_MESSAGES=15  # Default: 10 with warning if not set
+
+# Config class enhancement
+class Config:
+    def get_max_internal_messages(self) -> int:
+        """Returns max internal messages with warning if env var not set"""
+        max_messages = os.getenv('MAX_INTERNAL_MESSAGES', '10')
+        if 'MAX_INTERNAL_MESSAGES' not in os.environ:
+            logger.log_warning("MAX_INTERNAL_MESSAGES not set, using default of 10")
+        return int(max_messages)
+
+# Combined termination in AutogenMASFactory
+def _create_termination_conditions(self, max_internal_messages: int):
+    text_termination = TextMessageTermination()
+    max_msg_termination = MaxMessageTermination(max_messages=max_internal_messages)
+    return text_termination | max_msg_termination
+```
+
+**Key Features:**
+- **Cost Control**: Prevents unlimited internal agent conversations that could generate excessive API costs
+- **Configurable Limits**: Production teams can set appropriate limits via environment variables
+- **Graceful Degradation**: Enhanced non-text message handling returns structured error with conversation context
+- **Observability**: Detailed logging of termination reasons and message counts for debugging
+- **Separation of Concerns**: Internal MAS limits (agent↔agent) separate from external turn limits (user↔MAS)
+
+**Error Handling Enhancement:**
+```python
+# Enhanced non-text message handling in AutogenConversationEngine
+if not isinstance(last_message.content, str):
+    return {
+        'status': 'failed',
+        'error_type': 'NonTextMessageError', 
+        'mas_stop_reason': result.stop_reason,
+        'mas_message_count': len(result.messages),
+        'conversation_history': ConversationAdapter.extract_conversation_history(result.messages)
+    }
+```
+
 ## AutoGen Swarm Pattern Integration
 
 ### Key Swarm Features Leveraged:
@@ -213,8 +269,10 @@ sales_agent = AssistantAgent(
 ### Termination Conditions:
 
 ```python
-# REVISED: Only TextMentionTermination, no HandoffTermination to user
-termination = TextMentionTermination("TERMINATE")
+# REVISED: Combined termination conditions for internal message limiting
+text_termination = TextMentionTermination("TERMINATE")
+max_msg_termination = MaxMessageTermination(max_messages=max_internal_messages)
+termination = text_termination | max_msg_termination
 ```
 
 ### Conversation Loop Architecture:
@@ -314,6 +372,8 @@ while not timeout_reached and turn_count < max_turns:
 - **Tool Failures**: Graceful degradation with error context
 - **Agent Handoff Loops**: Termination conditions prevent infinite loops
 - **Session Isolation**: Tools maintain separate state per session_id
+- **Internal Message Limiting**: Combined termination conditions prevent unlimited agent conversations
+- **Non-Text Message Termination**: Enhanced error handling with structured failure responses and conversation context
 
 ### Contract Compliance:
 - **Geographic Restrictions**: Return `status: 'failed_api_blocked'` 
@@ -376,12 +436,13 @@ while not timeout_reached and turn_count < max_turns:
    - ✅ **Service layer coordination** of all component creation
 
 4. **Test Results:**
-   - ✅ 24 AutoGen-related tests passing (including 10 prompt formatting tests)
+   - ✅ 46 AutoGen-related tests passing (including comprehensive internal message limiting tests)
    - ✅ All components tested with real AutoGen classes
    - ✅ Proper mocking for user agent creation and conversation loops
    - ✅ **Comprehensive prompt formatting tests** with edge cases and error handling
    - ✅ Contract compliance verified
    - ✅ Clean architecture tests updated for new component interactions
+   - ✅ **Real simulation test**: 67-turn conversation completed successfully with proper agent handoffs, tool calls, and natural dialogue
 
 ### Architecture Benefits Realized:
 
@@ -454,5 +515,8 @@ The key advantages realized:
 - **Maintainable**: Clear separation between MAS logic, user simulation, and client creation
 - **Flexible**: Session-isolated tools and configurable agent relationships
 - **Compatible**: Maintains existing API contracts and integration points perfectly
+- **Cost Control**: Internal message limiting prevents unlimited agent conversations with configurable limits
+- **Enhanced Error Handling**: Graceful non-text message termination with detailed failure context
+- **Production Safety**: Environment variable warnings and robust logging for operational monitoring
 
-**🎯 IMPLEMENTATION COMPLETE**: All components are fully implemented, tested, and ready for production deployment with clean architecture principles and immutable prompt formatting system.
+**🎯 IMPLEMENTATION COMPLETE**: All components are fully implemented, tested, and ready for production deployment with clean architecture principles, immutable prompt formatting system, and configurable internal message limiting for cost control.
