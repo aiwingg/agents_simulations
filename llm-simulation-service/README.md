@@ -139,3 +139,18 @@ speaker.
 
 See the [ConversationEngine contract](docs/contracts/service_layer_contracts/conversational_engine_contract.md)
 for a complete description of all fields.
+
+### Conversation Results
+
+Each conversation result includes a `status` field describing how the session ended. Values are:
+
+- `completed` – conversation finished normally
+- `failed` – an error occurred
+- `failed_api_blocked` – OpenAI API request was blocked
+- `timeout` – conversation exceeded the time limit
+
+Example timeout result:
+
+```json
+{"status": "timeout", "total_turns": 3}
+```
