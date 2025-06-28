@@ -27,26 +27,21 @@ class CartItem(BaseModel):
 
 class RagFindProductsArgs(BaseModel):
     message: Annotated[str, "Описание товаров для поиска. Может содержать производителя, термическое состояние, способ упаковки, животное, объект, дополнительные указания"]
-    execution_message: Annotated[str, "Сообщение пользователю при вызове инструмента. Должно вписываться в разговор естественно"]
 
 class AddToCartArgs(BaseModel):
     items: Annotated[List[CartItem], "Список продуктов с количеством. Каждый элемент содержит код продукта, количество и опционально способ упаковки"]
-    execution_message: Annotated[str, "Сообщение пользователю при вызове инструмента"]
 
 class RemoveFromCartArgs(BaseModel):
     items: Annotated[List[str], "Список строк, где каждая строка равна коду продукта для удаления"]
-    execution_message: Annotated[str, "Сообщение пользователю при вызове инструмента"]
 
 class GetCartArgs(BaseModel):
-    execution_message: Annotated[str, "Сообщение пользователю при вызове инструмента"]
+    pass
 
 class ChangeDeliveryDateArgs(BaseModel):
     delivery_date: Annotated[str, "Дата доставки в формате YYYY-MM-DD"]
-    execution_message: Annotated[str, "Сообщение пользователю при вызове инструмента"]
 
 class SetCurrentLocationArgs(BaseModel):
     location_id: Annotated[int, "Номер адреса, на который необходимо оформить заказ. Можно выбрать из списка доступных адресов"]
-    execution_message: Annotated[str, "Сообщение пользователю при вызове инструмента"]
 
 class CallTransferArgs(BaseModel):
     reason: Annotated[str, "Reason for transferring the call"]
@@ -82,15 +77,14 @@ class RagFindProductsTool(SessionAwareTool):
     
     async def run(
         self,
-        message: Annotated[str, "Описание товаров для поиска. Может содержать производителя, термическое состояние, способ упаковки, животное, объект, дополнительные указания"],
-        execution_message: Annotated[str, "Сообщение пользователю при вызове инструмента. Должно вписываться в разговор естественно"],
+        args: RagFindProductsArgs,
         cancellation_token: CancellationToken
     ) -> str:
         """Найти товары соответствующие описанию"""
         try:
             result = await tool_emulator.call_tool(
                 "rag_find_products", 
-                {"message": message, "execution_message": execution_message},
+                {"message": args.message},
                 session_id=self.session_id
             )
             return json.dumps(result, ensure_ascii=False)
@@ -112,18 +106,17 @@ class AddToCartTool(SessionAwareTool):
     
     async def run(
         self,
-        items: Annotated[List[CartItem], "Список продуктов с количеством. Каждый элемент содержит код продукта, количество и опционально способ упаковки"],
-        execution_message: Annotated[str, "Сообщение пользователю при вызове инструмента"],
+        args: AddToCartArgs,
         cancellation_token: CancellationToken
     ) -> str:
         """Вызывается только, когда известен товар, который необходо добавить! Для сохранения товара в корзину, когда пользователь точно уверен в своем выборе."""
         try:
             # Convert Pydantic models to dict format expected by tool_emulator
-            items_dict = [item.model_dump() for item in items]
+            items_dict = [item.model_dump() for item in args.items]
             
             result = await tool_emulator.call_tool(
                 "add_to_cart",
-                {"items": items_dict, "execution_message": execution_message},
+                {"items": items_dict},
                 session_id=self.session_id
             )
             return json.dumps(result, ensure_ascii=False)
@@ -145,15 +138,14 @@ class RemoveFromCartTool(SessionAwareTool):
     
     async def run(
         self,
-        items: Annotated[List[str], "Список строк, где каждая строка равна коду продукта для удаления"],
-        execution_message: Annotated[str, "Сообщение пользователю при вызове инструмента"],
+        args: RemoveFromCartArgs,
         cancellation_token: CancellationToken
     ) -> str:
         """Вызывается только, когда известен товар, который необходо удалить! Для удаления товара из корзины."""
         try:
             result = await tool_emulator.call_tool(
                 "remove_from_cart",
-                {"items": items, "execution_message": execution_message},
+                {"items": args.items},
                 session_id=self.session_id
             )
             return json.dumps(result, ensure_ascii=False)
@@ -175,14 +167,14 @@ class GetCartTool(SessionAwareTool):
     
     async def run(
         self,
-        execution_message: Annotated[str, "Сообщение пользователю при вызове инструмента"],
+        args: GetCartArgs,
         cancellation_token: CancellationToken
     ) -> str:
         """Для получения всех товаров из корзины."""
         try:
             result = await tool_emulator.call_tool(
                 "get_cart",
-                {"execution_message": execution_message},
+                {},
                 session_id=self.session_id
             )
             return json.dumps(result, ensure_ascii=False)
@@ -204,15 +196,14 @@ class ChangeDeliveryDateTool(SessionAwareTool):
     
     async def run(
         self,
-        delivery_date: Annotated[str, "Дата доставки в формате YYYY-MM-DD"],
-        execution_message: Annotated[str, "Сообщение пользователю при вызове инструмента"],
+        args: ChangeDeliveryDateArgs,
         cancellation_token: CancellationToken
     ) -> str:
         """Изменяет дату доставки"""
         try:
             result = await tool_emulator.call_tool(
                 "change_delivery_date",
-                {"delivery_date": delivery_date, "execution_message": execution_message},
+                {"delivery_date": args.delivery_date},
                 session_id=self.session_id
             )
             return json.dumps(result, ensure_ascii=False)
@@ -234,15 +225,14 @@ class SetCurrentLocationTool(SessionAwareTool):
     
     async def run(
         self,
-        location_id: Annotated[int, "Номер адреса, на который необходимо оформить заказ. Можно выбрать из списка доступных адресов"],
-        execution_message: Annotated[str, "Сообщение пользователю при вызове инструмента"],
+        args: SetCurrentLocationArgs,
         cancellation_token: CancellationToken
     ) -> str:
         """Устанавливает адрес, на который оформляется заказ"""
         try:
             result = await tool_emulator.call_tool(
                 "set_current_location",
-                {"location_id": location_id, "execution_message": execution_message},
+                {"location_id": args.location_id},
                 session_id=self.session_id
             )
             return json.dumps(result, ensure_ascii=False)
@@ -264,14 +254,14 @@ class CallTransferTool(SessionAwareTool):
     
     async def run(
         self,
-        reason: Annotated[str, "Reason for transferring the call"],
+        args: CallTransferArgs,
         cancellation_token: CancellationToken
     ) -> str:
         """Transfer the call to a human operator"""
         try:
             result = await tool_emulator.call_tool(
                 "call_transfer",
-                {"reason": reason},
+                {"reason": args.reason},
                 session_id=self.session_id
             )
             return json.dumps(result, ensure_ascii=False)
@@ -293,14 +283,14 @@ class EndCallTool(SessionAwareTool):
     
     async def run(
         self,
-        reason: Annotated[str, "Reason for ending the call"],
+        args: EndCallArgs,
         cancellation_token: CancellationToken
     ) -> str:
         """End the conversation"""
         try:
             result = await tool_emulator.call_tool(
                 "end_call",
-                {"reason": reason},
+                {"reason": args.reason},
                 session_id=self.session_id
             )
             return json.dumps(result, ensure_ascii=False)
