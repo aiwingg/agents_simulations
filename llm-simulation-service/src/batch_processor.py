@@ -241,7 +241,7 @@ class BatchProcessor:
             raise ValueError(f"Batch job {batch_id} is not in pending status")
         
         # Load required classes lazily to avoid circular imports
-        from src.conversation_engine import ConversationEngine
+        from src.autogen_conversation_engine import AutogenConversationEngine
         from src.evaluator import ConversationEvaluator
 
         self.logger.log_info(
@@ -380,10 +380,10 @@ class BatchProcessor:
                 job = self.active_jobs[batch_id]
 
                 # Create isolated conversation engine and evaluator per scenario
-                from src.conversation_engine import ConversationEngine
+                from src.autogen_conversation_engine import AutogenConversationEngine
                 from src.evaluator import ConversationEvaluator
 
-                conversation_engine = ConversationEngine(self.openai_wrapper, job.prompt_spec_name)
+                conversation_engine = AutogenConversationEngine(self.openai_wrapper, job.prompt_spec_name)
                 evaluator = ConversationEvaluator(self.openai_wrapper, job.prompt_spec_name)
 
                 self.logger.log_info(

@@ -339,7 +339,7 @@ class AutogenConversationEngine:
                 # Start timeout for entire conversation
                 conversation_start = time.time()
                 current_user_message = initial_task
-                last_active_agent = "agent_agent"  # Default first agent
+                last_active_agent = "agent"  # Default first agent
                 
                 while turn_count < max_turns:
                     # Check timeout for entire conversation
@@ -355,7 +355,7 @@ class AutogenConversationEngine:
                     })
                     
                     # Run swarm with current user message
-                    task_result = await swarm.run_stream(
+                    task_result = await swarm.run(
                         task=HandoffMessage(source="client", target=last_active_agent, content=current_user_message)
                     )
                     
@@ -377,8 +377,9 @@ class AutogenConversationEngine:
                         'stop_reason': task_result.stop_reason
                     })
                     
-                    # Check if conversation naturally ended
-                    if task_result.stop_reason and task_result.stop_reason != "max_turns":
+                    # Check if conversation naturally ended (only on actual termination conditions)
+                    # TODO: this is a hack to check if the conversation ended naturally, think how to refactor this to normal behavior.
+                    if task_result.stop_reason and any(term in task_result.stop_reason.lower() for term in ["terminate", "end", "finished", "completed"]):
                         self.logger.log_info(f"Conversation ended naturally: {task_result.stop_reason}")
                         break
                     
