@@ -63,32 +63,10 @@ class TestAutogenMASFactory:
         # Should create combined termination condition
         assert termination is not None
         
-    @patch('src.autogen_mas_factory.OpenAIChatCompletionClient')
-    def test_create_autogen_client(self, mock_client_class):
-        """Test OpenAI client creation from wrapper"""
-        # Mock OpenAIWrapper
-        mock_wrapper = Mock()
-        mock_wrapper.client = Mock()
-        mock_wrapper.client.api_key = "test_api_key"
-        mock_wrapper.model = "gpt-4o-mini"
-        
-        # Mock client instance
-        mock_client_instance = Mock()
-        mock_client_class.return_value = mock_client_instance
-        
-        # Test client creation
-        client = self.factory._create_autogen_client(mock_wrapper)
-        
-        # Verify client was created with correct parameters
-        mock_client_class.assert_called_once_with(
-            model="gpt-4o-mini",
-            api_key="test_api_key"
-        )
-        assert client == mock_client_instance
+
         
     @patch('src.autogen_mas_factory.AssistantAgent')
-    @patch('src.autogen_mas_factory.OpenAIChatCompletionClient')
-    def test_create_swarm_agents(self, mock_client_class, mock_agent_class):
+    def test_create_swarm_agents(self, mock_agent_class):
         """Test swarm agents creation"""
         # Create test configuration
         agents_config = {
@@ -134,69 +112,3 @@ class TestAutogenMASFactory:
             description='Test agent description'
         )
         
-    @patch('src.autogen_mas_factory.Swarm')
-    @patch('src.autogen_mas_factory.AutogenToolFactory')
-    def test_create_swarm_team_with_openai_wrapper(self, mock_tool_factory_class, mock_swarm_class):
-        """Test full swarm team creation with OpenAIWrapper"""
-        # Create test specification
-        system_prompt_spec = SystemPromptSpecification(
-            name="Test Spec",
-            version="1.0",
-            description="Test specification",
-            agents={
-                'test_agent': AgentPromptSpecification(
-                    name='test_agent',
-                    prompt='You are a test agent',
-                    tools=['rag_find_products']
-                )
-            }
-        )
-        
-        # Mock OpenAIWrapper
-        mock_wrapper = Mock()
-        mock_wrapper.client = Mock()
-        mock_wrapper.client.api_key = "test_api_key"
-        mock_wrapper.model = "gpt-4o-mini"
-        
-        # Mock tool factory
-        mock_tool_factory = Mock()
-        mock_tool = Mock()
-        mock_tool.name = 'rag_find_products'
-        mock_tool_factory.get_tools_for_agent.return_value = [mock_tool]
-        mock_tool_factory_class.return_value = mock_tool_factory
-        
-        # Mock swarm
-        mock_swarm = Mock()
-        mock_agent = Mock()
-        mock_swarm.participants = [mock_agent]
-        mock_swarm_class.return_value = mock_swarm
-        
-        # Test swarm creation
-        with patch.object(self.factory, '_create_autogen_client') as mock_create_client, \
-             patch.object(self.factory, 'create_swarm_team') as mock_create_swarm:
-            mock_client = Mock()
-            mock_create_client.return_value = mock_client
-            mock_create_swarm.return_value = mock_swarm
-            
-            result = self.factory.create_swarm_team_with_openai_wrapper(
-                system_prompt_spec,
-                mock_wrapper,
-                "client"
-            )
-        
-        # Verify tool factory was created with correct session_id
-        mock_tool_factory_class.assert_called_once_with(self.session_id)
-        
-        # Verify tools were requested
-        mock_tool_factory.get_tools_for_agent.assert_called_once_with(['rag_find_products'])
-        
-        # Verify create_swarm_team was called with correct parameters
-        mock_create_swarm.assert_called_once_with(
-            system_prompt_spec,
-            [mock_tool],
-            mock_client,
-            "client"
-        )
-        
-        # Verify result
-        assert result == mock_swarm

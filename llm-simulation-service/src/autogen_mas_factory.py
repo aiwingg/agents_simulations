@@ -2,16 +2,14 @@
 AutogenMASFactory - Infrastructure Layer
 Creates AutoGen Swarm teams from SystemPromptSpecification with proper configuration
 """
-from typing import List, Dict, Any, Optional
+from typing import List, Dict
 from autogen_agentchat.agents import AssistantAgent
 from autogen_agentchat.teams import Swarm
 from autogen_agentchat.conditions import TextMessageTermination
-from autogen_ext.models.openai import OpenAIChatCompletionClient
+
 from autogen_core.tools import BaseTool
 
-from src.openai_wrapper import OpenAIWrapper
 from src.prompt_specification import SystemPromptSpecification, AgentPromptSpecification
-from src.autogen_tools import AutogenToolFactory
 from src.logging_utils import get_logger
 
 
@@ -29,7 +27,7 @@ class AutogenMASFactory:
         self, 
         system_prompt_spec: SystemPromptSpecification, 
         tools: List[BaseTool], 
-        model_client: OpenAIChatCompletionClient,
+        model_client,
         user_handoff_target: str = "client"
     ) -> Swarm:
         """
@@ -73,39 +71,13 @@ class AutogenMASFactory:
         
         return swarm
     
-    def _create_autogen_client(self, openai_wrapper: OpenAIWrapper) -> OpenAIChatCompletionClient:
-        """
-        Creates OpenAIChatCompletionClient from existing OpenAIWrapper config
-        
-        Args:
-            openai_wrapper: Existing OpenAIWrapper instance
-            
-        Returns:
-            Configured OpenAIChatCompletionClient for AutoGen usage
-        """
-        # Extract configuration from OpenAIWrapper
-        # Note: We need to access the underlying OpenAI client configuration
-        api_key = openai_wrapper.client.api_key
-        model = openai_wrapper.model
-        
-        # Create AutoGen-compatible client
-        client = OpenAIChatCompletionClient(
-            model=model,
-            api_key=api_key
-        )
-        
-        self.logger.log_info(f"Created AutoGen client for session {self.session_id}", extra_data={
-            'model': model,
-            'session_id': self.session_id
-        })
-        
-        return client
+
     
     def _create_swarm_agents(
         self, 
         agents_config: Dict[str, AgentPromptSpecification], 
         tools: List[BaseTool], 
-        model_client: OpenAIChatCompletionClient,
+        model_client,
         user_handoff_target: str
     ) -> List[AssistantAgent]:
         """
@@ -222,38 +194,3 @@ class AutogenMASFactory:
         
         return termination
     
-    def create_swarm_team_with_openai_wrapper(
-        self,
-        system_prompt_spec: SystemPromptSpecification,
-        openai_wrapper: OpenAIWrapper,
-        user_handoff_target: str = "client"
-    ) -> Swarm:
-        """
-        Convenience method that creates tools and Swarm team from OpenAIWrapper
-        
-        Args:
-            system_prompt_spec: SystemPromptSpecification with agent configurations
-            openai_wrapper: OpenAIWrapper instance to convert
-            user_handoff_target: Target name for user handoffs (default: "client")
-            
-        Returns:
-            Configured Swarm instance ready for conversation execution
-        """
-        # Create AutoGen client from OpenAIWrapper
-        model_client = self._create_autogen_client(openai_wrapper)
-        
-        # Create tools using AutogenToolFactory
-        tool_factory = AutogenToolFactory(self.session_id)
-        
-        # Collect all unique tool names from all agents
-        all_tool_names = set()
-        for agent_spec in system_prompt_spec.agents.values():
-            all_tool_names.update(agent_spec.tools)
-        
-        # Create tools for all agents
-        tools = tool_factory.get_tools_for_agent(list(all_tool_names))
-        
-        # Create swarm team with the model client
-        swarm = self.create_swarm_team(system_prompt_spec, tools, model_client, user_handoff_target)
-        
-        return swarm

@@ -137,12 +137,13 @@ class TestAutogenConversationEngine:
         assert session_id == "webhook_session_456"
         
     def test_create_autogen_client(self):
-        """Test AutoGen client creation from OpenAIWrapper"""
-        with patch('src.autogen_conversation_engine.OpenAIChatCompletionClient') as mock_client_class:
+        """Test AutoGen client creation via AutogenModelClientFactory"""
+        with patch('src.autogen_model_client.OpenAIChatCompletionClient') as mock_client_class:
             mock_client_instance = Mock()
             mock_client_class.return_value = mock_client_instance
             
-            result = self.engine._create_autogen_client()
+            from src.autogen_model_client import AutogenModelClientFactory
+            result = AutogenModelClientFactory.create_from_openai_wrapper(self.engine.openai)
             
             # Verify client was created with correct parameters
             mock_client_class.assert_called_once_with(
@@ -186,7 +187,7 @@ class TestAutogenConversationEngine:
         }
         
         # Mock all dependencies
-        with patch.object(self.engine, '_create_autogen_client') as mock_create_client, \
+        with patch('src.autogen_conversation_engine.AutogenModelClientFactory.create_from_openai_wrapper') as mock_create_client, \
              patch.object(self.engine, '_create_user_agent') as mock_create_user_agent, \
              patch('src.autogen_conversation_engine.AutogenToolFactory') as mock_tool_factory_class, \
              patch('src.autogen_conversation_engine.AutogenMASFactory') as mock_mas_factory_class, \
@@ -215,7 +216,7 @@ class TestAutogenConversationEngine:
             mock_task_result = Mock()
             mock_task_result.stop_reason = "completed_1_turns"  # Natural completion after 1 turn
             mock_task_result.messages = [mock_agent_message]
-            mock_swarm.run_stream = AsyncMock(return_value=mock_task_result)
+            mock_swarm.run = AsyncMock(return_value=mock_task_result)
             mock_mas_factory.create_swarm_team.return_value = mock_swarm
             mock_mas_factory_class.return_value = mock_mas_factory
             
@@ -242,12 +243,12 @@ class TestAutogenConversationEngine:
             mock_mas_factory_class.assert_called_once_with('test_session_123')
             mock_mas_factory.create_swarm_team.assert_called_once()
             
-            # Verify run_stream was called with HandoffMessage (not string)
-            assert mock_swarm.run_stream.call_count >= 1
-            call_args = mock_swarm.run_stream.call_args_list[0]
+            # Verify run was called with HandoffMessage (not string)
+            assert mock_swarm.run.call_count >= 1
+            call_args = mock_swarm.run.call_args_list[0]
             handoff_message = call_args[1]['task']  # keyword argument
             assert handoff_message.source == "client"
-            assert handoff_message.target == "agent_agent" 
+            assert handoff_message.target == "agent" 
             assert handoff_message.content == "Добрый день!"
             
             mock_adapter_class.autogen_to_contract_format.assert_called_once()
@@ -263,7 +264,7 @@ class TestAutogenConversationEngine:
             'variables': {'CLIENT_NAME': 'John'}
         }
         
-        with patch.object(self.engine, '_create_autogen_client') as mock_create_client, \
+        with patch('src.autogen_conversation_engine.AutogenModelClientFactory.create_from_openai_wrapper') as mock_create_client, \
              patch.object(self.engine, '_create_user_agent') as mock_create_user_agent, \
              patch('src.autogen_conversation_engine.AutogenToolFactory') as mock_tool_factory_class, \
              patch('src.autogen_conversation_engine.AutogenMASFactory') as mock_mas_factory_class:
@@ -314,7 +315,7 @@ class TestAutogenConversationEngine:
             'variables': {'CLIENT_NAME': 'John'}
         }
         
-        with patch.object(self.engine, '_create_autogen_client') as mock_create_client:
+        with patch('src.autogen_conversation_engine.AutogenModelClientFactory.create_from_openai_wrapper') as mock_create_client:
             # Mock geographic restriction error
             mock_create_client.side_effect = Exception('geographic restriction detected')
             
@@ -339,7 +340,7 @@ class TestAutogenConversationEngine:
             'variables': {'CLIENT_NAME': 'John'}
         }
         
-        with patch.object(self.engine, '_create_autogen_client') as mock_create_client:
+        with patch('src.autogen_conversation_engine.AutogenModelClientFactory.create_from_openai_wrapper') as mock_create_client:
             # Mock general error
             mock_create_client.side_effect = ValueError('Something went wrong')
             
@@ -364,7 +365,7 @@ class TestAutogenConversationEngine:
             'variables': {'client_id': 'client_123'}
         }
         
-        with patch.object(self.engine, '_create_autogen_client') as mock_create_client, \
+        with patch('src.autogen_conversation_engine.AutogenModelClientFactory.create_from_openai_wrapper') as mock_create_client, \
              patch.object(self.engine, '_create_user_agent') as mock_create_user_agent, \
              patch('src.autogen_conversation_engine.AutogenToolFactory') as mock_tool_factory_class, \
              patch('src.autogen_conversation_engine.AutogenMASFactory') as mock_mas_factory_class, \
@@ -393,7 +394,7 @@ class TestAutogenConversationEngine:
             mock_task_result = Mock()
             mock_task_result.stop_reason = "completed_1_turns"  # Natural completion after 1 turn
             mock_task_result.messages = [mock_agent_message]
-            mock_swarm.run_stream = AsyncMock(return_value=mock_task_result)
+            mock_swarm.run = AsyncMock(return_value=mock_task_result)
             mock_mas_factory.create_swarm_team.return_value = mock_swarm
             mock_mas_factory_class.return_value = mock_mas_factory
             

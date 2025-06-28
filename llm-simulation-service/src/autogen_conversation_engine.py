@@ -13,7 +13,6 @@ from autogen_agentchat.teams import Swarm
 from autogen_agentchat.messages import HandoffMessage, TextMessage
 from autogen_agentchat.agents import AssistantAgent
 from autogen_agentchat.base import TaskResult
-from autogen_ext.models.openai import OpenAIChatCompletionClient
 
 # Existing infrastructure
 from src.openai_wrapper import OpenAIWrapper
@@ -26,6 +25,7 @@ from src.config import Config
 from src.autogen_mas_factory import AutogenMASFactory
 from src.conversation_adapter import ConversationAdapter
 from src.autogen_tools import AutogenToolFactory
+from src.autogen_model_client import AutogenModelClientFactory
 
 # Braintrust tracing import
 from braintrust import traced
@@ -208,7 +208,7 @@ class AutogenConversationEngine:
             
         return result
 
-    def _create_user_agent(self, model_client: OpenAIChatCompletionClient, variables: Dict[str, Any]) -> AssistantAgent:
+    def _create_user_agent(self, model_client, variables: Dict[str, Any]) -> AssistantAgent:
         """
         Create AssistantAgent for realistic user simulation.
         
@@ -292,7 +292,7 @@ class AutogenConversationEngine:
         
         try:
             # Create AutoGen model client from OpenAIWrapper
-            model_client = self._create_autogen_client()
+            model_client = AutogenModelClientFactory.create_from_openai_wrapper(self.openai)
             
             # Create user simulation agent
             user_agent = self._create_user_agent(model_client, variables)
@@ -523,26 +523,3 @@ class AutogenConversationEngine:
                 'error_context': error_context
             }
     
-    def _create_autogen_client(self) -> OpenAIChatCompletionClient:
-        """
-        Creates OpenAIChatCompletionClient from existing OpenAIWrapper config.
-        
-        Returns:
-            Configured OpenAIChatCompletionClient for AutoGen usage
-        """
-        # Extract configuration from OpenAIWrapper
-        api_key = self.openai.client.api_key
-        model = self.openai.model
-        
-        # Create AutoGen-compatible client
-        client = OpenAIChatCompletionClient(
-            model=model,
-            api_key=api_key
-        )
-        
-        self.logger.log_info(f"Created AutoGen client", extra_data={
-            'model': model,
-            'engine_type': 'AutoGen'
-        })
-        
-        return client
