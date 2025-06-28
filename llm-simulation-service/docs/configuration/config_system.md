@@ -8,6 +8,7 @@
 - `MAX_TURNS` – conversation turn limit (default `30`).
 - `TIMEOUT_SEC` – timeout per conversation (default `90`).
 - `CONCURRENCY` – number of parallel scenarios (default `4`).
+- `MAX_INTERNAL_MESSAGES` – limits the number of internal agent-to-agent messages before termination (default `10`). A warning is logged when the variable isn’t set.
 - `WEBHOOK_URL` – optional URL for session initialization.
 - `RESULTS_DIR` – directory for exported results (default `results`).
 - `LOGS_DIR` – directory for log files (default `logs`).
