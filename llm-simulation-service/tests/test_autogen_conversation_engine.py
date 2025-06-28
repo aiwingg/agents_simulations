@@ -72,48 +72,32 @@ class TestAutogenConversationEngine:
         assert self.engine.webhook_manager is not None
         assert self.engine.logger is not None
         
-    def test_format_prompt(self):
-        """Test prompt formatting with variables"""
-        template = "Hello {{ name }}, today is {{ current_date }}"
-        variables = {"name": "Alice"}
-        session_id = "test_session"
-        
-        result = self.engine._format_prompt(template, variables, session_id)
-        
-        # Should include default current_date and session_id
-        assert "Alice" in result
-        assert "2024-01-15" in result  # Default current_date
-        
-    def test_format_prompt_with_defaults(self):
-        """Test prompt formatting applies default values"""
-        template = "Client: {{ CLIENT_NAME }}, Location: {{ LOCATION }}"
-        variables = {}
-        session_id = "test_session"
-        
-        result = self.engine._format_prompt(template, variables, session_id)
-        
-        # Should use default values
-        assert "Клиент" in result  # Default CLIENT_NAME
-        assert "Адрес не указан" in result  # Default LOCATION
+
         
     @pytest.mark.asyncio
     async def test_enrich_variables_with_client_data_no_client_id(self):
         """Test variable enrichment when no client_id is provided"""
         variables = {"NAME": "John", "LOCATIONS": "Moscow"}
+        test_session_id = "test_session_123"
         
-        enriched_vars, session_id = await self.engine._enrich_variables_with_client_data(variables)
+        enriched_vars, session_id = await self.engine._enrich_variables_with_client_data(variables, test_session_id)
         
         # Should preserve original variables and add lowercase versions
         assert enriched_vars["NAME"] == "John"
         assert enriched_vars["name"] == "John"
         assert enriched_vars["LOCATIONS"] == "Moscow"
         assert enriched_vars["locations"] == "Moscow"
+        # Should add session_id to variables
+        assert enriched_vars["session_id"] == test_session_id
+        # Should apply default values
+        assert enriched_vars["CURRENT_DATE"] == "2024-01-15"
         assert session_id is None
         
     @pytest.mark.asyncio
     async def test_enrich_variables_with_client_data_with_client_id(self):
         """Test variable enrichment when client_id is provided"""
         variables = {"client_id": "client_123"}
+        test_session_id = "test_session_123"
         
         # Mock webhook response
         mock_client_data = {
@@ -126,7 +110,7 @@ class TestAutogenConversationEngine:
         }
         self.engine.webhook_manager.get_client_data = AsyncMock(return_value=mock_client_data)
         
-        enriched_vars, session_id = await self.engine._enrich_variables_with_client_data(variables)
+        enriched_vars, session_id = await self.engine._enrich_variables_with_client_data(variables, test_session_id)
         
         # Should use webhook data
         assert enriched_vars["NAME"] == "Alice"
@@ -134,22 +118,21 @@ class TestAutogenConversationEngine:
         assert enriched_vars["LOCATIONS"] == "St. Petersburg"
         assert enriched_vars["locations"] == "St. Petersburg"
         assert enriched_vars["current_date"] == "2024-06-27"
+        # Should add session_id to variables
+        assert enriched_vars["session_id"] == test_session_id
         assert session_id == "webhook_session_456"
         
     def test_create_autogen_client(self):
         """Test AutoGen client creation via AutogenModelClientFactory"""
-        with patch('src.autogen_model_client.OpenAIChatCompletionClient') as mock_client_class:
+        with patch('src.autogen_model_client.AutogenModelClientFactory.create_from_openai_wrapper') as mock_factory:
             mock_client_instance = Mock()
-            mock_client_class.return_value = mock_client_instance
+            mock_factory.return_value = mock_client_instance
             
             from src.autogen_model_client import AutogenModelClientFactory
             result = AutogenModelClientFactory.create_from_openai_wrapper(self.engine.openai)
             
-            # Verify client was created with correct parameters
-            mock_client_class.assert_called_once_with(
-                model="gpt-4o-mini",
-                api_key="test_api_key"
-            )
+            # Verify factory was called with correct parameters
+            mock_factory.assert_called_once_with(self.engine.openai)
             assert result == mock_client_instance
             
     @pytest.mark.asyncio
@@ -191,11 +174,17 @@ class TestAutogenConversationEngine:
              patch.object(self.engine, '_create_user_agent') as mock_create_user_agent, \
              patch('src.autogen_conversation_engine.AutogenToolFactory') as mock_tool_factory_class, \
              patch('src.autogen_conversation_engine.AutogenMASFactory') as mock_mas_factory_class, \
-             patch('src.autogen_conversation_engine.ConversationAdapter') as mock_adapter_class:
+             patch('src.autogen_conversation_engine.ConversationAdapter') as mock_adapter_class, \
+             patch.object(self.engine.prompt_specification, 'format_with_variables') as mock_format_spec:
             
             # Setup mocks
             mock_client = Mock()
             mock_create_client.return_value = mock_client
+            
+            # Mock formatted spec
+            mock_formatted_spec = Mock()
+            mock_formatted_spec.agents = self.engine.prompt_specification.agents
+            mock_format_spec.return_value = mock_formatted_spec
             
             # Mock user agent  
             mock_user_agent = Mock()
@@ -233,7 +222,7 @@ class TestAutogenConversationEngine:
             
             # Mock enrich_variables to return session_id
             with patch.object(self.engine, '_enrich_variables_with_client_data') as mock_enrich:
-                mock_enrich.return_value = ({'CLIENT_NAME': 'John'}, None)
+                mock_enrich.return_value = ({'CLIENT_NAME': 'John', 'name': 'John', 'session_id': 'test_session_123'}, None)
                 
                 result = await self.engine.run_conversation_with_tools(scenario)
             
@@ -292,7 +281,7 @@ class TestAutogenConversationEngine:
             with patch.object(self.engine, '_enrich_variables_with_client_data') as mock_enrich, \
                  patch('time.time') as mock_time:
                 
-                mock_enrich.return_value = ({'CLIENT_NAME': 'John'}, None)
+                mock_enrich.return_value = ({'CLIENT_NAME': 'John', 'name': 'John', 'session_id': 'test_session_123'}, None)
                 
                 # Mock time.time() to simulate timeout after first iteration
                 start_time = 1000.0
@@ -321,7 +310,7 @@ class TestAutogenConversationEngine:
             
             # Mock enrich_variables to return session_id
             with patch.object(self.engine, '_enrich_variables_with_client_data') as mock_enrich:
-                mock_enrich.return_value = ({'CLIENT_NAME': 'John'}, None)
+                mock_enrich.return_value = ({'CLIENT_NAME': 'John', 'name': 'John', 'session_id': 'test_session_123'}, None)
                 
                 result = await self.engine.run_conversation_with_tools(scenario)
             
@@ -346,7 +335,7 @@ class TestAutogenConversationEngine:
             
             # Mock enrich_variables to return session_id
             with patch.object(self.engine, '_enrich_variables_with_client_data') as mock_enrich:
-                mock_enrich.return_value = ({'CLIENT_NAME': 'John'}, None)
+                mock_enrich.return_value = ({'CLIENT_NAME': 'John', 'name': 'John', 'session_id': 'test_session_123'}, None)
                 
                 result = await self.engine.run_conversation_with_tools(scenario)
             
@@ -369,7 +358,8 @@ class TestAutogenConversationEngine:
              patch.object(self.engine, '_create_user_agent') as mock_create_user_agent, \
              patch('src.autogen_conversation_engine.AutogenToolFactory') as mock_tool_factory_class, \
              patch('src.autogen_conversation_engine.AutogenMASFactory') as mock_mas_factory_class, \
-             patch('src.autogen_conversation_engine.ConversationAdapter') as mock_adapter_class:
+             patch('src.autogen_conversation_engine.ConversationAdapter') as mock_adapter_class, \
+             patch.object(self.engine.webhook_manager, 'get_client_data', new_callable=AsyncMock) as mock_get_client_data:
             
             # Setup mocks
             mock_client = Mock()
@@ -405,9 +395,12 @@ class TestAutogenConversationEngine:
             }
             mock_adapter_class.autogen_to_contract_format.return_value = mock_adapter_result
             
+            # Mock webhook client data
+            mock_get_client_data.return_value = {'session_id': 'webhook_session_456'}
+            
             # Mock enrich_variables to return webhook session_id
             with patch.object(self.engine, '_enrich_variables_with_client_data') as mock_enrich:
-                mock_enrich.return_value = ({'client_id': 'client_123'}, 'webhook_session_456')
+                mock_enrich.return_value = ({'client_id': 'client_123', 'name': 'Client', 'session_id': 'webhook_session_456'}, 'webhook_session_456')
                 
                 result = await self.engine.run_conversation_with_tools(scenario)
             

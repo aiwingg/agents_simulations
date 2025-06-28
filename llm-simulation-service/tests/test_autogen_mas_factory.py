@@ -39,10 +39,8 @@ class TestAutogenMASFactory:
             )
         }
         
-        user_handoff_target = "client"
-        
         # Test handoff setup
-        handoff_config = self.factory._setup_agent_handoffs(agents_config, user_handoff_target)
+        handoff_config = self.factory._setup_agent_handoffs(agents_config)
         
         # Verify handoff configuration
         assert 'sales_agent' in handoff_config
@@ -56,9 +54,7 @@ class TestAutogenMASFactory:
         
     def test_create_termination_conditions(self):
         """Test termination conditions creation"""
-        user_handoff_target = "client"
-        
-        termination = self.factory._create_termination_conditions(user_handoff_target)
+        termination = self.factory._create_termination_conditions()
         
         # Should create combined termination condition
         assert termination is not None
@@ -94,8 +90,7 @@ class TestAutogenMASFactory:
         agents = self.factory._create_swarm_agents(
             agents_config, 
             tools, 
-            mock_model_client, 
-            "client"
+            mock_model_client
         )
         
         # Verify agent was created

@@ -62,74 +62,19 @@ class AutogenConversationEngine:
             'engine_type': 'AutoGen'
         })
     
-    def _format_prompt(self, template: str, variables: Dict[str, Any], session_id: str) -> str:
-        """
-        Format prompt template with variables using Jinja2.
-        Reuses existing formatting logic from ConversationEngine for compatibility.
-        """
-        try:
-            # Reuse existing formatting logic from the original ConversationEngine
-            from jinja2 import Environment, BaseLoader, Template, StrictUndefined, DebugUndefined, UndefinedError
-            
-            # Add session_id to variables
-            variables = variables.copy()
-            variables['session_id'] = session_id
-            
-            # Set default values for missing variables
-            defaults = {
-                'CURRENT_DATE': '2024-01-15',
-                'current_date': '2024-01-15',
-                'DELIVERY_DAY': 'завтра',
-                'delivery_days': 'понедельник, среда, пятница',
-                'PURCHASE_HISTORY': 'История покупок отсутствует',
-                'purchase_history': 'История покупок отсутствует',
-                'name': variables.get('CLIENT_NAME', 'Клиент'),
-                'locations': variables.get('LOCATION', 'Адрес не указан'),
-                'CLIENT_NAME': variables.get('CLIENT_NAME', 'Клиент'),
-                'LOCATION': variables.get('LOCATION', 'Адрес не указан')
-            }
-            
-            # Add defaults for missing variables
-            for key, default_value in defaults.items():
-                if key not in variables:
-                    variables[key] = default_value
-            
-            # Create Jinja2 environment with undefined handling
-            jinja_env = Environment(
-                loader=BaseLoader(),
-                undefined=StrictUndefined
-            )
-            
-            # Use Jinja2 to render the template with proper variable handling
-            jinja_template = jinja_env.from_string(template)
-            return jinja_template.render(**variables)
-            
-        except Exception as e:
-            if isinstance(e, UndefinedError):
-                self.logger.log_error(f"Missing variable in prompt template: {e}")
-                # For missing variables, try with a more lenient approach
-                try:
-                    jinja_env_lenient = Environment(
-                        loader=BaseLoader(),
-                        undefined=DebugUndefined
-                    )
-                    jinja_template = jinja_env_lenient.from_string(template)
-                    result = jinja_template.render(**variables)
-                    self.logger.log_info(f"Template rendered with debug undefined variables")
-                    return result
-                except Exception as fallback_error:
-                    self.logger.log_error(f"Template rendering failed even with lenient mode: {fallback_error}")
-                    return template
-            else:
-                self.logger.log_error(f"Template rendering error: {e}")
-                return template
+
     
-    async def _enrich_variables_with_client_data(self, variables: Dict[str, Any]) -> Tuple[Dict[str, Any], Optional[str]]:
+    async def _enrich_variables_with_client_data(self, variables: Dict[str, Any], session_id: str) -> Tuple[Dict[str, Any], Optional[str]]:
         """
         Enrich variables with client data from webhook if client_id is provided.
         Falls back to existing values if client_id is not present.
+        Also applies default values for template formatting.
         Reuses existing logic from ConversationEngine for compatibility.
         
+        Args:
+            variables: Dictionary of scenario variables
+            session_id: Session ID to add to variables
+            
         Returns:
             Tuple of (enriched_variables, session_id_from_webhook)
         """
@@ -175,6 +120,28 @@ class AutogenConversationEngine:
                 variables['purchase_history'] = variables['PURCHASE_HISTORY']
             if 'NAME' in variables and 'name' not in variables:
                 variables['name'] = variables['NAME']
+        
+        # Add session_id to variables
+        variables['session_id'] = session_id
+        
+        # Set default values for missing variables for template formatting
+        defaults = {
+            'CURRENT_DATE': '2024-01-15',
+            'current_date': '2024-01-15',
+            'DELIVERY_DAY': 'завтра',
+            'delivery_days': 'понедельник, среда, пятница',
+            'PURCHASE_HISTORY': 'История покупок отсутствует',
+            'purchase_history': 'История покупок отсутствует',
+            'name': variables.get('CLIENT_NAME', 'Клиент'),
+            'locations': variables.get('LOCATION', 'Адрес не указан'),
+            'CLIENT_NAME': variables.get('CLIENT_NAME', 'Клиент'),
+            'LOCATION': variables.get('LOCATION', 'Адрес не указан')
+        }
+        
+        # Add defaults for missing variables
+        for key, default_value in defaults.items():
+            if key not in variables:
+                variables[key] = default_value
                 
         return variables, webhook_session_id
 
@@ -208,38 +175,26 @@ class AutogenConversationEngine:
             
         return result
 
-    def _create_user_agent(self, model_client, variables: Dict[str, Any]) -> AssistantAgent:
+    def _create_user_agent(self, model_client, formatted_spec: SystemPromptSpecification) -> AssistantAgent:
         """
-        Create AssistantAgent for realistic user simulation.
+        Create AssistantAgent for realistic user simulation using client agent from formatted spec.
         
         Args:
             model_client: OpenAI client for the user simulation agent
-            variables: Scenario variables for context
+            formatted_spec: SystemPromptSpecification with formatted prompts
             
         Returns:
             Configured AssistantAgent for user simulation
         """
-        # Create system message for user simulation based on variables
-        user_context = []
-        if variables.get('CLIENT_NAME'):
-            user_context.append(f"You are {variables['CLIENT_NAME']}")
-        if variables.get('LOCATION'):
-            user_context.append(f"located in {variables['LOCATION']}")
-        if variables.get('PURCHASE_HISTORY'):
-            user_context.append(f"Purchase history: {variables['PURCHASE_HISTORY']}")
-            
-        user_system_message = f"""You are simulating a customer in a conversation with customer service agents. 
-        {'. '.join(user_context) if user_context else 'You are a typical customer.'}
-        
-        Respond naturally and realistically as a customer would. Be conversational, ask questions when needed, 
-        and respond appropriately to the agents' suggestions and information. Keep responses concise but natural.
-        
-        Don't mention that you are simulating anything - stay in character as a real customer."""
+        # Get client agent from formatted specification
+        client_agent_spec = formatted_spec.get_agent_prompt("client")
+        if not client_agent_spec:
+            raise ValueError("No 'client' agent found in formatted specification for user simulation")
         
         user_agent = AssistantAgent(
             name="user_agent",
             model_client=model_client,
-            system_message=user_system_message
+            system_message=client_agent_spec.prompt
         )
         
         return user_agent
@@ -265,16 +220,38 @@ class AutogenConversationEngine:
         variables = scenario.get('variables', {})
         seed = variables.get('SEED')
         
-        # Enrich variables with client data if client_id is provided
-        variables, webhook_session_id = await self._enrich_variables_with_client_data(variables)
-        
         # Use webhook session_id if available, otherwise initialize a new session
+        webhook_session_id = None
+        client_id = variables.get('client_id')
+        if client_id:
+            # Get session_id from webhook if client_id is provided
+            client_data = await self.webhook_manager.get_client_data(client_id)
+            webhook_session_id = client_data.get('session_id')
+        
         if webhook_session_id:
             session_id = webhook_session_id
             self.logger.log_info(f"Using session_id from webhook: {session_id}")
         else:
             session_id = await self.webhook_manager.initialize_session()
             self.logger.log_info(f"Using generated session_id: {session_id}")
+        
+        # Enrich variables with client data and apply defaults
+        variables, _ = await self._enrich_variables_with_client_data(variables, session_id)
+        
+        # Format prompt specification with variables
+        try:
+            formatted_spec = self.prompt_specification.format_with_variables(variables)
+            self.logger.log_info(f"Successfully formatted prompt specification", extra_data={
+                'session_id': session_id,
+                'agents_formatted': list(formatted_spec.agents.keys())
+            })
+        except Exception as e:
+            self.logger.log_error(f"Failed to format prompt specification: {e}", extra_data={
+                'session_id': session_id,
+                'spec_name': self.prompt_spec_name,
+                'variables_count': len(variables)
+            })
+            raise
         
         self.logger.log_info(f"Starting AutoGen conversation simulation with tools", extra_data={
             'session_id': session_id,
@@ -294,27 +271,26 @@ class AutogenConversationEngine:
             # Create AutoGen model client from OpenAIWrapper
             model_client = AutogenModelClientFactory.create_from_openai_wrapper(self.openai)
             
-            # Create user simulation agent
-            user_agent = self._create_user_agent(model_client, variables)
+            # Create user simulation agent using formatted spec
+            user_agent = self._create_user_agent(model_client, formatted_spec)
             
             # Create session-isolated tool factory
             tool_factory = AutogenToolFactory(session_id)
             
-            # Collect all unique tool names from all agents
+            # Collect all unique tool names from all agents in formatted spec
             all_tool_names = set()
-            for agent_spec in self.prompt_specification.agents.values():
+            for agent_spec in formatted_spec.agents.values():
                 all_tool_names.update(agent_spec.tools)
             
             # Create tools for all agents (session-isolated)
             tools = tool_factory.get_tools_for_agent(list(all_tool_names))
             
-            # Create AutoGen Swarm team (without user as participant)
+            # Create AutoGen Swarm team using formatted spec (without user as participant)
             mas_factory = AutogenMASFactory(session_id)
             swarm = mas_factory.create_swarm_team(
-                system_prompt_spec=self.prompt_specification,
+                system_prompt_spec=formatted_spec,
                 tools=tools,
-                model_client=model_client,
-                user_handoff_target="client"  # This is now ignored
+                model_client=model_client
             )
             
             # Prepare initial task based on system prompt spec

@@ -33,6 +33,46 @@ class AgentPromptSpecification:
         
         return ToolsSpecification.get_tools_by_names(tool_names, self.handoffs or {})
     
+    def format_with_variables(self, variables: Dict[str, Any]) -> 'AgentPromptSpecification':
+        """
+        Create a new AgentPromptSpecification instance with formatted prompt using Jinja2.
+        
+        Args:
+            variables: Dictionary of variables to substitute in the prompt template
+            
+        Returns:
+            New AgentPromptSpecification instance with formatted prompt
+            
+        Raises:
+            Exception: If formatting fails due to missing variables or template errors
+        """
+        from jinja2 import Environment, BaseLoader, Template, StrictUndefined, UndefinedError
+        
+        try:
+            # Create Jinja2 environment with strict undefined handling
+            jinja_env = Environment(
+                loader=BaseLoader(),
+                undefined=StrictUndefined
+            )
+            
+            # Use Jinja2 to render the template with proper variable handling
+            jinja_template = jinja_env.from_string(self.prompt)
+            formatted_prompt = jinja_template.render(**variables)
+            
+            # Create new instance with formatted prompt
+            return AgentPromptSpecification(
+                name=self.name,
+                prompt=formatted_prompt,
+                tools=self.tools.copy(),
+                description=self.description,
+                handoffs=self.handoffs.copy() if self.handoffs else None
+            )
+            
+        except UndefinedError as e:
+            raise ValueError(f"Missing variable in prompt template for agent '{self.name}': {e}")
+        except Exception as e:
+            raise ValueError(f"Template formatting failed for agent '{self.name}': {e}")
+    
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for JSON serialization"""
         result = asdict(self)
@@ -87,6 +127,39 @@ class SystemPromptSpecification:
         if agent:
             return agent.get_tool_schemas()
         return []
+    
+    def format_with_variables(self, variables: Dict[str, Any]) -> 'SystemPromptSpecification':
+        """
+        Create a new SystemPromptSpecification instance with all agent prompts formatted using Jinja2.
+        
+        Args:
+            variables: Dictionary of variables to substitute in prompt templates
+            
+        Returns:
+            New SystemPromptSpecification instance with all prompts formatted
+            
+        Raises:
+            ValueError: If 'client' agent is missing or formatting fails for any agent
+        """
+        # Validate that 'client' agent exists (required for user simulation)
+        if 'client' not in self.agents:
+            raise ValueError("SystemPromptSpecification must contain a 'client' agent for user simulation")
+        
+        # Format all agent prompts
+        formatted_agents = {}
+        for agent_name, agent_spec in self.agents.items():
+            try:
+                formatted_agents[agent_name] = agent_spec.format_with_variables(variables)
+            except Exception as e:
+                raise ValueError(f"Failed to format prompt for agent '{agent_name}': {e}")
+        
+        # Create new instance with formatted agents
+        return SystemPromptSpecification(
+            name=self.name,
+            version=self.version,
+            description=self.description,
+            agents=formatted_agents
+        )
     
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for JSON serialization"""

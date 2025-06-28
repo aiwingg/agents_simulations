@@ -27,8 +27,7 @@ class AutogenMASFactory:
         self, 
         system_prompt_spec: SystemPromptSpecification, 
         tools: List[BaseTool], 
-        model_client,
-        user_handoff_target: str = "client"
+        model_client
     ) -> Swarm:
         """
         Creates AutoGen Swarm team from SystemPromptSpecification and pre-created tools
@@ -37,29 +36,30 @@ class AutogenMASFactory:
             system_prompt_spec: SystemPromptSpecification with agent configurations
             tools: List of pre-created BaseTool instances (from AutogenToolFactory)
             model_client: OpenAIChatCompletionClient for the agents
-            user_handoff_target: Target name for user handoffs (default: "client")
             
         Returns:
             Configured Swarm instance ready for conversation execution
         """
+        # Validate that at least one agent exists
+        if not system_prompt_spec.agents:
+            raise ValueError("SystemPromptSpecification must contain at least one agent")
+        
         self.logger.log_info(f"Creating Swarm team for session {self.session_id}", extra_data={
             'spec_name': system_prompt_spec.name,
             'spec_version': system_prompt_spec.version,
             'agents': list(system_prompt_spec.agents.keys()),
-            'tools_count': len(tools),
-            'user_handoff_target': user_handoff_target
+            'tools_count': len(tools)
         })
         
         # Create AssistantAgent instances with handoffs and tools
         agents = self._create_swarm_agents(
             system_prompt_spec.agents, 
             tools, 
-            model_client, 
-            user_handoff_target
+            model_client
         )
         
         # Create termination conditions
-        termination = self._create_termination_conditions(user_handoff_target)
+        termination = self._create_termination_conditions()
         
         # Create and return Swarm
         swarm = Swarm(participants=agents, termination_condition=termination)
@@ -77,17 +77,15 @@ class AutogenMASFactory:
         self, 
         agents_config: Dict[str, AgentPromptSpecification], 
         tools: List[BaseTool], 
-        model_client,
-        user_handoff_target: str
+        model_client
     ) -> List[AssistantAgent]:
         """
-        Creates AssistantAgent instances with handoffs, tools, and user handoffs
+        Creates AssistantAgent instances with handoffs and tools
         
         Args:
             agents_config: Dictionary of agent name -> AgentPromptSpecification
             tools: List of available tools to distribute among agents
             model_client: OpenAI client for the agents
-            user_handoff_target: Target name for user handoffs
             
         Returns:
             List of configured AssistantAgent instances
@@ -95,7 +93,7 @@ class AutogenMASFactory:
         agents = []
         
         # Setup handoff relationships: agent-to-agent only (no user handoffs)
-        handoff_config = self._setup_agent_handoffs(agents_config, user_handoff_target)
+        handoff_config = self._setup_agent_handoffs(agents_config)
         
         # Create tool mapping for efficient lookup
         tools_by_name = {tool.name: tool for tool in tools}
@@ -136,15 +134,13 @@ class AutogenMASFactory:
     
     def _setup_agent_handoffs(
         self, 
-        agents_config: Dict[str, AgentPromptSpecification],
-        user_handoff_target: str
+        agents_config: Dict[str, AgentPromptSpecification]
     ) -> Dict[str, List[str]]:
         """
         Configures handoff relationships: agent-to-agent only (no user handoffs)
         
         Args:
             agents_config: Dictionary of agent configurations
-            user_handoff_target: Target name for user handoffs (ignored in new implementation)
             
         Returns:
             Dictionary mapping agent_name -> list of handoff targets (agents only)
@@ -174,13 +170,10 @@ class AutogenMASFactory:
         
         return handoff_config
     
-    def _create_termination_conditions(self, user_handoff_target: str):
+    def _create_termination_conditions(self):
         """
         Creates TextMessageTermination only since user is external to MAS
         
-        Args:
-            user_handoff_target: Target for user handoffs (ignored in new implementation)
-            
         Returns:
             TextMessageTermination condition for the Swarm
         """
