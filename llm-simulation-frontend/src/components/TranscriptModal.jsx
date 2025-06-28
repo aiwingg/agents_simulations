@@ -87,11 +87,13 @@ const TranscriptModal = ({ open, onClose, session }) => {
   };
 
   // Helper function to get display name for speaker
-  const getSpeakerDisplayName = (speaker) => {
+  const getSpeakerDisplayName = (entry) => {
+    if (!entry) return 'Unknown';
+    if (entry.speaker_display) return entry.speaker_display;
+    const speaker = typeof entry === 'string' ? entry : entry.speaker;
     if (!speaker) return 'Unknown';
     if (speaker === 'client') return 'Client';
     if (speaker.startsWith('agent_')) {
-      // Extract agent type from speaker (e.g., "agent_agent" -> "Agent", "agent_support" -> "Support Agent")
       const agentType = speaker.replace('agent_', '');
       return agentType === 'agent' ? 'Agent' : `${agentType.charAt(0).toUpperCase() + agentType.slice(1)} Agent`;
     }
@@ -248,7 +250,7 @@ const TranscriptModal = ({ open, onClose, session }) => {
 
     text += session.conversation_history
       .map((entry, index) => {
-        let entryText = `${index + 1}. ${getSpeakerDisplayName(entry.speaker).toUpperCase()}: ${entry.content || '[No content]'}`;
+        let entryText = `${index + 1}. ${getSpeakerDisplayName(entry).toUpperCase()}: ${entry.content || '[No content]'}`;
         
         // Add tool calls information
         if (entry.tool_calls && entry.tool_calls.length > 0) {
@@ -309,7 +311,7 @@ const TranscriptModal = ({ open, onClose, session }) => {
 
     text += session.conversation_history
       .map((entry, index) => {
-        let entryText = `${index + 1}. ${getSpeakerDisplayName(entry.speaker).toUpperCase()}: ${entry.content || '[No content]'}`;
+        let entryText = `${index + 1}. ${getSpeakerDisplayName(entry).toUpperCase()}: ${entry.content || '[No content]'}`;
         
         // Add tool calls information
         if (entry.tool_calls && entry.tool_calls.length > 0) {
@@ -507,7 +509,7 @@ const TranscriptModal = ({ open, onClose, session }) => {
                           </Avatar>
                           <Box sx={{ flex: 1 }}>
                             <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
-                              {getSpeakerDisplayName(entry.speaker)}
+                              {getSpeakerDisplayName(entry)}
                             </Typography>
                             <Typography variant="caption" color="text.secondary">
                               Turn {entry.turn || index + 1}

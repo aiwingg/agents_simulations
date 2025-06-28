@@ -84,9 +84,10 @@ The `conversation_history` is a list of turn objects. Each turn has different st
 
 #### Basic Turn (no tools)
 ```python
-{
+{ 
     "turn": int,                    # Turn number (1, 2, 3, etc.)
     "speaker": str,                 # "agent" | "client" | "agent_{agent_name}"
+    "speaker_display": str,         # Optional descriptive name
     "content": str,                 # The actual message content
     "timestamp": str                # ISO format timestamp
 }
@@ -97,6 +98,7 @@ The `conversation_history` is a list of turn objects. Each turn has different st
 {
     "turn": int,                    # Turn number
     "speaker": str,                 # "agent_{agent_name}" | "client"
+    "speaker_display": str,         # Optional descriptive name
     "content": str,                 # Message content (can be empty string)
     "tool_calls": List[Dict],       # List of tool call objects
     "tool_results": List[Any],      # List of parsed tool results (agent only)
@@ -192,6 +194,15 @@ Tool results are the parsed responses from tool executions. The structure varies
     ],
     "timestamp": "2025-06-26T18:07:12.088764"
 }
+```
+
+### Example with Display Names
+
+```python
+[
+    {"turn": 1, "speaker": "agent_sales_agent", "speaker_display": "Sales Agent", "content": "Hello"},
+    {"turn": 2, "speaker": "client", "speaker_display": "Client", "content": "Hi"}
+]
 ```
 
 ## Integration Points
