@@ -14,10 +14,22 @@ Produced by `ConversationEngine.run_conversation`.
 Main keys include:
 - `session_id` – unique ID for the run
 - `scenario` – scenario name
-- `status` – `completed`, `failed`, etc.
+- `status` – one of `completed`, `failed`, `failed_api_blocked`, `timeout`
 - `total_turns` – number of conversation turns
 - `duration_seconds` – execution time
 - `conversation_history` – list of turn objects
+
+#### Example Result
+```json
+{
+    "session_id": "abc123",
+    "scenario": "demo",
+    "status": "failed_api_blocked",
+    "total_turns": 0,
+    "duration_seconds": 0.1,
+    "conversation_history": []
+}
+```
 
 ### Conversation History Structure
 Each turn dictionary contains at least the following fields:
