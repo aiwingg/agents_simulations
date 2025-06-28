@@ -340,27 +340,22 @@ class TestAutogenConversationEngine:
             
             mock_mas_factory = Mock()
             mock_swarm = Mock()
+            mock_swarm.run = AsyncMock(side_effect=asyncio.TimeoutError())
             mock_mas_factory.create_swarm_team.return_value = mock_swarm
             mock_mas_factory_class.return_value = mock_mas_factory
-            
-            # Simulate timeout by mocking time.time() to advance quickly
-            # Mock enrich_variables to return session_id
-            with patch.object(self.engine, '_enrich_variables_with_client_data') as mock_enrich, \
-                 patch('time.time') as mock_time:
+
+            # Mock enrich_variables to return session_id and trigger timeout via swarm.run
+            with patch.object(self.engine, '_enrich_variables_with_client_data') as mock_enrich:
                 
                 mock_enrich.return_value = ({'CLIENT_NAME': 'John', 'name': 'John', 'session_id': 'test_session_123'}, None)
-                
-                # Mock time.time() to simulate timeout after first iteration
-                start_time = 1000.0
-                # Need enough time values for all the calls: start_time, conversation_start, timeout check, end_time, etc.
-                mock_time.side_effect = [start_time, start_time, start_time + 15.0, start_time + 15.1, start_time + 15.2]
                 
                 result = await self.engine.run_conversation_with_tools(scenario, timeout_sec=10)
             
             # Verify timeout result
-            assert result['status'] == 'failed'
+            assert result['status'] == 'timeout'
             assert result['error_type'] == 'TimeoutError'
             assert 'timeout after 10 seconds' in result['error']
+            assert isinstance(result['conversation_history'], list)
             assert result['tools_used'] == True
             
     @pytest.mark.asyncio

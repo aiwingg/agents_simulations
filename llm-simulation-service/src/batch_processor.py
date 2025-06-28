@@ -437,6 +437,19 @@ class BatchProcessor:
                         'graceful_degradation': True,
                         'partial_completion': conversation_result.get('partial_completion', False)
                     }
+                elif conversation_result.get('status') == 'timeout':
+                    # Conversation timed out but may contain partial history
+                    combined_result = {
+                        'scenario_index': scenario_index,
+                        'scenario': scenario_name,
+                        'session_id': conversation_result.get('session_id'),
+                        'status': 'timeout',
+                        'error': conversation_result.get('error'),
+                        'total_turns': conversation_result.get('total_turns', 0),
+                        'score': 1,
+                        'comment': f"Разговор прерван по таймауту: {conversation_result.get('error')}",
+                        'conversation_history': conversation_result.get('conversation_history', [])
+                    }
                 else:
                     # Conversation failed
                     combined_result = {
