@@ -5,7 +5,7 @@ Single entry point for creating OpenAI completion clients for AutoGen usage
 from autogen_ext.models.openai import OpenAIChatCompletionClient
 from src.openai_wrapper import OpenAIWrapper
 from src.logging_utils import get_logger
-
+from braintrust import wrap_openai
 
 class AutogenModelClientFactory:
     """
@@ -35,6 +35,8 @@ class AutogenModelClientFactory:
             model=model,
             api_key=api_key
         )
+
+        client._client = wrap_openai(client._client)
         
         logger.log_info(f"Created AutoGen client", extra_data={
             'model': model,
