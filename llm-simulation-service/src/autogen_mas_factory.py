@@ -5,12 +5,13 @@ Creates AutoGen Swarm teams from SystemPromptSpecification with proper configura
 from typing import List, Dict
 from autogen_agentchat.agents import AssistantAgent
 from autogen_agentchat.teams import Swarm
-from autogen_agentchat.conditions import TextMessageTermination
+from autogen_agentchat.conditions import TextMessageTermination, MaxMessageTermination
 
 from autogen_core.tools import BaseTool
 
 from src.prompt_specification import SystemPromptSpecification, AgentPromptSpecification
 from src.logging_utils import get_logger
+from src.config import Config
 
 
 class AutogenMASFactory:
@@ -58,8 +59,9 @@ class AutogenMASFactory:
             model_client
         )
         
-        # Create termination conditions
-        termination = self._create_termination_conditions()
+        # Get max internal messages from config and create termination conditions
+        max_internal_messages = Config.get_max_internal_messages()
+        termination = self._create_termination_conditions(max_internal_messages)
         
         # Create and return Swarm
         swarm = Swarm(participants=agents, termination_condition=termination)
@@ -170,19 +172,25 @@ class AutogenMASFactory:
         
         return handoff_config
     
-    def _create_termination_conditions(self):
+    def _create_termination_conditions(self, max_internal_messages: int):
         """
-        Creates TextMessageTermination only since user is external to MAS
+        Creates combined termination conditions to limit internal MAS conversations
         
+        Args:
+            max_internal_messages: Maximum number of internal messages before termination
+            
         Returns:
-            TextMessageTermination condition for the Swarm
+            Combined termination condition for the Swarm
         """
-        # Only use TextMessageTermination since user is external
-        termination = TextMessageTermination()
+        # Combine TextMessageTermination with MaxMessageTermination to prevent runaway conversations
+        text_termination = TextMessageTermination()
+        max_msg_termination = MaxMessageTermination(max_messages=max_internal_messages)
+        termination = text_termination | max_msg_termination
         
         self.logger.log_info(f"Created termination conditions for session {self.session_id}", extra_data={
             'user_external': True,
-            'conditions': ['TextMessageTermination']
+            'conditions': ['TextMessageTermination', 'MaxMessageTermination'],
+            'max_internal_messages': max_internal_messages
         })
         
         return termination

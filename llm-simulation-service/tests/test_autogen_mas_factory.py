@@ -53,8 +53,9 @@ class TestAutogenMASFactory:
         assert 'client' not in handoff_config['support_agent']  # User is external now
         
     def test_create_termination_conditions(self):
-        """Test termination conditions creation"""
-        termination = self.factory._create_termination_conditions()
+        """Test termination conditions creation with max_internal_messages parameter"""
+        max_internal_messages = 15
+        termination = self.factory._create_termination_conditions(max_internal_messages)
         
         # Should create combined termination condition
         assert termination is not None

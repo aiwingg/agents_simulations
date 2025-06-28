@@ -341,8 +341,37 @@ class AutogenConversationEngine:
                     # Get last message from MAS (should be TextMessage)
                     last_message = task_result.messages[-1]
                     if not isinstance(last_message, TextMessage):
-                        self.logger.log_warning(f"Expected TextMessage, got {type(last_message)}")
-                        break
+                        self.logger.log_error(
+                            f"MAS terminated with non-text message - cannot pass to user simulation. "
+                            f"Expected TextMessage, got {type(last_message).__name__}",
+                            extra_data={
+                                'session_id': session_id,
+                                'turn_count': turn_count,
+                                'message_type': type(last_message).__name__,
+                                'stop_reason': task_result.stop_reason,
+                                'total_mas_messages': len(task_result.messages),
+                                'scenario': scenario_name
+                            }
+                        )
+                        # Stop conversation gracefully - create error result
+                        end_time = time.time()
+                        duration = end_time - start_time
+                        
+                        return {
+                            'session_id': session_id,
+                            'scenario': scenario_name,
+                            'status': 'failed',
+                            'error': f'MAS terminated with non-text message ({type(last_message).__name__})',
+                            'error_type': 'NonTextMessageError',
+                            'total_turns': turn_count,
+                            'duration_seconds': duration,
+                            'tools_used': True,
+                            'conversation_history': ConversationAdapter.extract_conversation_history(all_messages),
+                            'start_time': datetime.fromtimestamp(start_time).isoformat(),
+                            'end_time': datetime.fromtimestamp(end_time).isoformat(),
+                            'mas_stop_reason': task_result.stop_reason,
+                            'mas_message_count': len(task_result.messages)
+                        }
                     
                     # Update last active agent for next iteration
                     last_active_agent = last_message.source

@@ -21,6 +21,14 @@ class Config:
     CONCURRENCY: int = int(os.getenv('CONCURRENCY', '4'))
     USE_TOOLS: bool = os.getenv('USE_TOOLS', 'True').lower() == 'true'
     
+    # AutoGen MAS Configuration - Internal message limit for agent conversations
+    _MAX_INTERNAL_MESSAGES_ENV = os.getenv('MAX_INTERNAL_MESSAGES')
+    if _MAX_INTERNAL_MESSAGES_ENV is not None:
+        MAX_INTERNAL_MESSAGES: int = int(_MAX_INTERNAL_MESSAGES_ENV)
+    else:
+        MAX_INTERNAL_MESSAGES: int = 10
+        # Note: Warning will be logged when first accessed via get_max_internal_messages()
+    
     # Webhook Configuration
     WEBHOOK_URL: str = os.getenv('WEBHOOK_URL', '')
     
@@ -53,4 +61,18 @@ class Config:
         """Ensure all required directories exist"""
         for directory in [cls.LOGS_DIR, cls.RESULTS_DIR]:
             os.makedirs(directory, exist_ok=True)
+    
+    @classmethod 
+    def get_max_internal_messages(cls) -> int:
+        """Get MAX_INTERNAL_MESSAGES with warning if using default value"""
+        if cls._MAX_INTERNAL_MESSAGES_ENV is None:
+            # Import here to avoid circular imports
+            from src.logging_utils import get_logger
+            logger = get_logger()
+            logger.log_warning(
+                f"MAX_INTERNAL_MESSAGES environment variable not set, using default value: {cls.MAX_INTERNAL_MESSAGES}. "
+                "Set MAX_INTERNAL_MESSAGES=N to configure internal agent message limit.",
+                extra_data={'default_value': cls.MAX_INTERNAL_MESSAGES}
+            )
+        return cls.MAX_INTERNAL_MESSAGES
 

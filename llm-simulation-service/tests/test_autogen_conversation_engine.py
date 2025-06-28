@@ -162,6 +162,73 @@ class TestAutogenConversationEngine:
             assert result['tools_used'] == False
             
     @pytest.mark.asyncio
+    async def test_non_text_message_error_handling(self):
+        """Test conversation engine handles non-text final messages gracefully"""
+        # This is a simplified test that verifies the error path without complex mocking
+        # In practice, the non-text message scenario would be tested via integration tests
+        scenario = {
+            'name': 'test_scenario',
+            'variables': {'CLIENT_NAME': 'John'}
+        }
+        
+        # Test scenario: Create a mock that will trigger the non-text message path
+        # We'll simulate this by making the last message not be a TextMessage instance
+        from autogen_agentchat.messages import TextMessage
+        
+        # Create a real TextMessage for comparison
+        text_msg = TextMessage(content="Hello", source="test_agent")
+        
+        # Create a non-text mock object
+        non_text_msg = Mock()
+        non_text_msg.__class__ = Mock  # This won't be a TextMessage
+        
+        # Mock TaskResult with mixed message types
+        mock_task_result = Mock()
+        mock_task_result.messages = [text_msg, non_text_msg]  # Last message is not TextMessage
+        mock_task_result.stop_reason = "MaxMessageTermination reached"
+        
+        with patch('src.autogen_conversation_engine.AutogenModelClientFactory.create_from_openai_wrapper') as mock_create_client, \
+             patch.object(self.engine, '_create_user_agent') as mock_create_user_agent, \
+             patch('src.autogen_conversation_engine.AutogenToolFactory') as mock_tool_factory_class, \
+             patch('src.autogen_conversation_engine.AutogenMASFactory') as mock_mas_factory_class, \
+             patch('src.autogen_conversation_engine.ConversationAdapter') as mock_adapter_class, \
+             patch.object(self.engine.prompt_specification, 'format_with_variables') as mock_format_spec:
+            
+            # Setup mocks
+            mock_client = Mock()
+            mock_create_client.return_value = mock_client
+            
+            mock_formatted_spec = Mock()
+            mock_formatted_spec.agents = self.engine.prompt_specification.agents
+            mock_format_spec.return_value = mock_formatted_spec
+            
+            mock_user_agent = Mock()
+            mock_create_user_agent.return_value = mock_user_agent
+            
+            mock_tool_factory = Mock()
+            mock_tools = [Mock()]
+            mock_tool_factory.get_tools_for_agent.return_value = mock_tools
+            mock_tool_factory_class.return_value = mock_tool_factory
+            
+            mock_mas_factory = Mock()
+            mock_swarm = Mock()
+            mock_swarm.run = AsyncMock(return_value=mock_task_result)
+            mock_mas_factory.create_swarm_team.return_value = mock_swarm
+            mock_mas_factory_class.return_value = mock_mas_factory
+            
+            mock_adapter_class.extract_conversation_history.return_value = []
+            
+            # Run conversation
+            result = await self.engine.run_conversation_with_tools(scenario)
+            
+            # Verify graceful error handling
+            assert result['status'] == 'failed'
+            assert result['error_type'] == 'NonTextMessageError'
+            assert 'Mock' in result['error']  # Mock class name will be in error
+            assert result['mas_stop_reason'] == "MaxMessageTermination reached"
+            assert result['mas_message_count'] == 2
+            
+    @pytest.mark.asyncio
     async def test_run_conversation_with_tools_success(self):
         """Test successful conversation with tools using AutoGen Swarm"""
         scenario = {
