@@ -51,7 +51,17 @@ paths:
           name: format
           schema: {type: string}
       responses:
-        '200': {description: Results}
+        '200':
+          description: Results
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  conversation_history:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ConversationHistoryItem'
   /api/batches/{id}/summary:
     get:
       summary: Batch summary
@@ -61,7 +71,17 @@ paths:
           required: true
           schema: {type: string}
       responses:
-        '200': {description: Summary}
+        '200':
+          description: Summary
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  conversation_history:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ConversationHistoryItem'
   /api/batches/{id}/cost:
     get:
       summary: Cost estimate
@@ -131,3 +151,21 @@ paths:
       summary: Delete user
       responses:
         '204': {description: Deleted}
+
+components:
+  schemas:
+    ConversationHistoryItem:
+      type: object
+      properties:
+        turn: {type: integer}
+        speaker: {type: string}
+        speaker_display: {type: string}
+        content: {type: string}
+        timestamp: {type: string}
+        tool_calls:
+          type: array
+          items: {type: object}
+        tool_results:
+          type: array
+          items: {}
+      required: [turn, speaker, content, timestamp]
