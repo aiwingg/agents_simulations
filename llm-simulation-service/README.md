@@ -123,3 +123,19 @@ graph TB
 - [Service Contracts](docs/contracts/service_layer_contracts/) - Internal service interfaces
 - [Storage Contracts](docs/contracts/storage_contracts/) - Data persistence interfaces
 - [Infrastructure Contracts](docs/contracts/infra_util_contracts/) - External adapter contracts
+
+### Conversation History
+
+Simulation results include a `conversation_history` array. Each entry contains a
+`speaker_display` field that provides a user-friendly label for the message
+speaker.
+
+```json
+[
+    {"turn": 1, "speaker": "agent_sales_agent", "speaker_display": "Sales Agent", "content": "Hello"},
+    {"turn": 2, "speaker": "client", "speaker_display": "Client", "content": "Hi"}
+]
+```
+
+See the [ConversationEngine contract](docs/contracts/service_layer_contracts/conversational_engine_contract.md)
+for a complete description of all fields.
