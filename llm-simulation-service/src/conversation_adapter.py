@@ -237,7 +237,9 @@ class ConversationAdapter:
                     if tool_calls:
                         pending_calls.extend(tool_calls)
                     if tool_results:
-                        pending_results.extend(tool_results)
+                        for result in tool_results:
+                            if result not in pending_results:
+                                pending_results.append(result)
 
                     continue
 
