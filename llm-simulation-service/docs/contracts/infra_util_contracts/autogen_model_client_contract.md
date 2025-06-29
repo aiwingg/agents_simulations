@@ -1,7 +1,9 @@
 # AutogenModelClientFactory Contract
 
-Centralized factory for AutoGen-compatible OpenAI clients with Braintrust tracing.
+Centralized factory for creating AutoGen-compatible OpenAI clients with Braintrust tracing.
 
 ## Static Methods
 - `create_from_openai_wrapper(openai_wrapper: OpenAIWrapper) -> OpenAIChatCompletionClient`
-  - Returns a configured client based on the wrapper and wraps it with Braintrust.
+  - Uses the wrapper's API key and model to instantiate `OpenAIChatCompletionClient`.
+  - Wraps the underlying client with `braintrust.wrap_openai` for tracing.
+  - Returns the configured client instance.
