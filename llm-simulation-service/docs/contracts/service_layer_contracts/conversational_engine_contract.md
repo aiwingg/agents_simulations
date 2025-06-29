@@ -84,9 +84,10 @@ The `conversation_history` is a list of turn objects. Each turn has different st
 
 #### Basic Turn (no tools)
 ```python
-{
+{ 
     "turn": int,                    # Turn number (1, 2, 3, etc.)
     "speaker": str,                 # "agent" | "client" | "agent_{agent_name}"
+    "speaker_display": str,         # Optional descriptive name
     "content": str,                 # The actual message content
     "timestamp": str                # ISO format timestamp
 }
@@ -97,6 +98,7 @@ The `conversation_history` is a list of turn objects. Each turn has different st
 {
     "turn": int,                    # Turn number
     "speaker": str,                 # "agent_{agent_name}" | "client"
+    "speaker_display": str,         # Optional descriptive name
     "content": str,                 # Message content (can be empty string)
     "tool_calls": List[Dict],       # List of tool call objects
     "tool_results": List[Any],      # List of parsed tool results (agent only)
@@ -194,6 +196,15 @@ Tool results are the parsed responses from tool executions. The structure varies
 }
 ```
 
+### Example with Display Names
+
+```python
+[
+    {"turn": 1, "speaker": "agent_sales_agent", "speaker_display": "Sales Agent", "content": "Hello"},
+    {"turn": 2, "speaker": "client", "speaker_display": "Client", "content": "Hi"}
+]
+```
+
 ## Integration Points
 
 ### BatchProcessor Integration
@@ -224,6 +235,7 @@ else:
 - Tool call failures: Logged but don't stop conversation
 - Agent handoff failures: Logged with detailed context
 - Timeout and turn limit enforcement returns `status: 'timeout'` with collected history
+  and these partial conversations are still evaluated when running as part of a batch
 
 ### Session Management
 

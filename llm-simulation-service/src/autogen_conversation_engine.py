@@ -366,7 +366,10 @@ class AutogenConversationEngine:
                             'total_turns': turn_count,
                             'duration_seconds': duration,
                             'tools_used': True,
-                            'conversation_history': ConversationAdapter.extract_conversation_history(all_messages),
+                            'conversation_history': ConversationAdapter.extract_conversation_history(
+                                all_messages,
+                                self.prompt_specification
+                            ),
                             'start_time': datetime.fromtimestamp(start_time).isoformat(),
                             'end_time': datetime.fromtimestamp(end_time).isoformat(),
                             'mas_stop_reason': task_result.stop_reason,
@@ -428,7 +431,8 @@ class AutogenConversationEngine:
                     session_id=session_id,
                     scenario_name=scenario_name,
                     duration=duration,
-                    start_time=start_time
+                    start_time=start_time,
+                    prompt_spec=self.prompt_specification
                 )
                 
                 # Log conversation completion
@@ -455,7 +459,10 @@ class AutogenConversationEngine:
                     }
                 )
 
-                history = ConversationAdapter.extract_conversation_history(all_messages)
+                history = ConversationAdapter.extract_conversation_history(
+                    all_messages,
+                    self.prompt_specification
+                )
 
                 # Return timeout result in contract format
                 return {

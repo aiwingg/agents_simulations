@@ -23,6 +23,7 @@ from autogen_agentchat.messages import (
 from autogen_agentchat.base import TaskResult
 from autogen_core._types import FunctionCall
 from autogen_core.models import FunctionExecutionResult
+from src.prompt_specification import AgentPromptSpecification, SystemPromptSpecification
 
 # Helper function to create FunctionCall objects
 def create_function_call(id: str, name: str, arguments: str) -> FunctionCall:
@@ -152,7 +153,7 @@ class TestConversationAdapter:
             TextMessage(source="sales_agent", content="Hello, how can I help you?"),
             TextMessage(source="client", content="I need some beef"),
         ]
-        
+
         history = ConversationAdapter.extract_conversation_history(messages)
         
         assert len(history) == 2  # System message should be skipped
@@ -167,6 +168,28 @@ class TestConversationAdapter:
         assert history[1]["turn"] == 2
         assert history[1]["speaker"] == "client"
         assert history[1]["content"] == "I need some beef"
+
+    def test_extract_conversation_history_display_names(self):
+        """Verify speaker_display is derived from prompt specification"""
+        messages = [
+            TextMessage(source="sales_agent", content="Hello"),
+            TextMessage(source="client", content="Hi")
+        ]
+
+        prompt_spec = SystemPromptSpecification(
+            name="spec",
+            version="1.0",
+            description="",
+            agents={
+                "sales_agent": AgentPromptSpecification(name="Sales Agent", prompt="", tools=[]),
+                "client": AgentPromptSpecification(name="Client", prompt="", tools=[])
+            }
+        )
+
+        history = ConversationAdapter.extract_conversation_history(messages, prompt_spec)
+
+        assert history[0]["speaker_display"] == "Sales Agent"
+        assert history[1]["speaker_display"] == "Client"
     
     def test_extract_conversation_history_with_tools(self):
         """Test conversation history extraction with tool calls"""

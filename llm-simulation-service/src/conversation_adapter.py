@@ -30,11 +30,12 @@ class ConversationAdapter:
     
     @staticmethod
     def autogen_to_contract_format(
-        task_result: TaskResult, 
-        session_id: str, 
-        scenario_name: str, 
+        task_result: TaskResult,
+        session_id: str,
+        scenario_name: str,
         duration: float,
-        start_time: Optional[float] = None
+        start_time: Optional[float] = None,
+        prompt_spec: Optional[Any] = None
     ) -> Dict[str, Any]:
         """
         Converts AutoGen TaskResult to ConversationEngine contract format
@@ -45,6 +46,7 @@ class ConversationAdapter:
             scenario_name: Name of the scenario
             duration: Conversation duration in seconds
             start_time: Start timestamp (optional, will generate if not provided)
+            prompt_spec: Optional prompt specification used for display names
             
         Returns:
             Dictionary matching existing ConversationEngine output contract
@@ -58,7 +60,10 @@ class ConversationAdapter:
             end_time = current_time
             
             # Extract conversation history from AutoGen messages
-            conversation_history = ConversationAdapter.extract_conversation_history(task_result.messages)
+            conversation_history = ConversationAdapter.extract_conversation_history(
+                task_result.messages,
+                prompt_spec
+            )
             
             # Determine status based on stop reason and messages
             status = ConversationAdapter._determine_conversation_status(task_result.stop_reason, conversation_history)
@@ -115,7 +120,10 @@ class ConversationAdapter:
             }
     
     @staticmethod
-    def extract_conversation_history(messages: List[BaseChatMessage | BaseAgentEvent]) -> List[Dict]:
+    def extract_conversation_history(
+        messages: List[BaseChatMessage | BaseAgentEvent],
+        prompt_spec: Optional[Any] = None
+    ) -> List[Dict]:
         """
         Converts AutoGen messages to conversation_history format with tool_calls/tool_results
         
@@ -128,6 +136,18 @@ class ConversationAdapter:
         logger = get_logger()
         conversation_history = []
         turn_number = 0
+        display_name_map = {}
+
+        if prompt_spec:
+            try:
+                agents = getattr(prompt_spec, "agents", getattr(prompt_spec, "agents", {}))
+                for agent_id, agent_spec in agents.items():
+                    if hasattr(agent_spec, "name"):
+                        display_name_map[agent_id] = agent_spec.name
+                    elif isinstance(agent_spec, dict):
+                        display_name_map[agent_id] = agent_spec.get("name", agent_id)
+            except Exception as e:
+                logger.log_error(f"Failed to build display name map: {e}", exception=e)
         
         try:
             for i, message in enumerate(messages):
@@ -150,6 +170,21 @@ class ConversationAdapter:
                     "content": content,
                     "timestamp": datetime.now().isoformat()
                 }
+
+                # Derive display name for speaker
+                agent_id = getattr(message, "source", None)
+                display_name = None
+                if agent_id and agent_id in display_name_map:
+                    display_name = display_name_map[agent_id]
+                if not display_name:
+                    if speaker == "client":
+                        display_name = "Client"
+                    elif speaker.startswith("agent_"):
+                        agent_type = speaker.replace("agent_", "")
+                        display_name = "Agent" if agent_type == "agent" else f"{agent_type.capitalize()} Agent"
+                    else:
+                        display_name = speaker.capitalize() if speaker else "Unknown"
+                history_entry["speaker_display"] = display_name
                 
                 # Handle tool calls and results
                 tool_calls, tool_results = ConversationAdapter._extract_tools_info(message)

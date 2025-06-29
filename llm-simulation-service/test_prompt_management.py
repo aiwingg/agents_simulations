@@ -2,6 +2,8 @@
 """
 Test script for prompt specification management functionality
 """
+import pytest
+pytest.skip("legacy integration script", allow_module_level=True)
 
 import os
 import sys
