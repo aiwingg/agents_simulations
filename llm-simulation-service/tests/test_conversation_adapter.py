@@ -63,9 +63,7 @@ class TestConversationAdapter:
 
     def test_extract_content_tool_call_request_event(self):
         """Test content extraction from ToolCallRequestEvent"""
-        tool_call = create_function_call(
-            "call_1", "rag_find_products", '{"message": "find beef"}'
-        )
+        tool_call = create_function_call("call_1", "rag_find_products", '{"message": "find beef"}')
         message = ToolCallRequestEvent(source="agent", content=[tool_call])
         content = ConversationAdapter._extract_content(message)
         assert content == "[TOOL CALL REQUEST: 1 tools]"
@@ -82,9 +80,7 @@ class TestConversationAdapter:
 
     def test_extract_tools_info_tool_call_request(self):
         """Test tool call extraction from ToolCallRequestEvent"""
-        tool_call = create_function_call(
-            "call_1", "rag_find_products", '{"message": "find beef"}'
-        )
+        tool_call = create_function_call("call_1", "rag_find_products", '{"message": "find beef"}')
         message = ToolCallRequestEvent(source="agent", content=[tool_call])
 
         tool_calls, tool_results = ConversationAdapter._extract_tools_info(message)
@@ -136,9 +132,7 @@ class TestConversationAdapter:
 
     def test_determine_conversation_status_handoff(self):
         """Test status determination for handoff stop reason"""
-        status = ConversationAdapter._determine_conversation_status(
-            "handoff_to_client", []
-        )
+        status = ConversationAdapter._determine_conversation_status("handoff_to_client", [])
         assert status == "completed"
 
     def test_determine_conversation_status_end_call(self):
@@ -151,9 +145,7 @@ class TestConversationAdapter:
                 "tool_calls": [{"function": {"name": "end_call"}}],
             }
         ]
-        status = ConversationAdapter._determine_conversation_status(
-            "unknown", conversation_history
-        )
+        status = ConversationAdapter._determine_conversation_status("unknown", conversation_history)
         assert status == "completed"
 
     def test_extract_conversation_history_basic(self):
@@ -191,25 +183,19 @@ class TestConversationAdapter:
             version="1.0",
             description="",
             agents={
-                "sales_agent": AgentPromptSpecification(
-                    name="Sales Agent", prompt="", tools=[]
-                ),
+                "sales_agent": AgentPromptSpecification(name="Sales Agent", prompt="", tools=[]),
                 "client": AgentPromptSpecification(name="Client", prompt="", tools=[]),
             },
         )
 
-        history = ConversationAdapter.extract_conversation_history(
-            messages, prompt_spec
-        )
+        history = ConversationAdapter.extract_conversation_history(messages, prompt_spec)
 
         assert history[0]["speaker_display"] == "Sales Agent"
         assert history[1]["speaker_display"] == "Client"
 
     def test_extract_conversation_history_with_tools(self):
         """Test conversation history extraction with tool calls"""
-        tool_call = create_function_call(
-            "call_1", "rag_find_products", '{"message": "beef"}'
-        )
+        tool_call = create_function_call("call_1", "rag_find_products", '{"message": "beef"}')
         messages = [
             TextMessage(source="client", content="I need some beef"),
             ToolCallRequestEvent(source="sales_agent", content=[tool_call]),
@@ -283,9 +269,7 @@ class TestConversationAdapter:
         messages = [
             TextMessage(source="sales_agent", content="Hello, how can I help?"),
             TextMessage(source="client", content="I need some products"),
-            TextMessage(
-                source="sales_agent", content="Great, let me help you find them"
-            ),
+            TextMessage(source="sales_agent", content="Great, let me help you find them"),
         ]
         task_result = TaskResult(messages=messages, stop_reason="max_turns")
 
@@ -322,9 +306,7 @@ class TestConversationAdapter:
         mock_logger.return_value = mock_logger_instance
 
         # Create TaskResult with tools
-        tool_call = create_function_call(
-            "call_1", "rag_find_products", '{"message": "beef"}'
-        )
+        tool_call = create_function_call("call_1", "rag_find_products", '{"message": "beef"}')
         messages = [
             TextMessage(source="client", content="I need beef"),
             ToolCallRequestEvent(source="sales_agent", content=[tool_call]),
@@ -377,17 +359,11 @@ class TestConversationAdapter:
     def test_conversation_adapter_integration(self):
         """Integration test simulating typical AutoGen conversation flow"""
         # Simulate a complete conversation with handoffs and tools
-        tool_call = create_function_call(
-            "call_1", "rag_find_products", '{"message": "fresh beef"}'
-        )
-        handoff_tool = create_function_call(
-            "call_2", "end_call", '{"reason": "order completed"}'
-        )
+        tool_call = create_function_call("call_1", "rag_find_products", '{"message": "fresh beef"}')
+        handoff_tool = create_function_call("call_2", "end_call", '{"reason": "order completed"}')
 
         messages = [
-            TextMessage(
-                source="system", content="You are a sales agent"
-            ),  # Should be skipped
+            TextMessage(source="system", content="You are a sales agent"),  # Should be skipped
             TextMessage(source="client", content="Hello, I need to order some meat"),
             TextMessage(
                 source="sales_agent",
@@ -497,3 +473,34 @@ class TestConversationAdapter:
         assert tool_results is not None
         assert len(tool_results) == 1
         assert tool_results[0] == "not valid json {}"  # Should be stored as string
+
+    def test_tool_results_not_duplicated(self):
+        """Results from execution and summary events should not duplicate."""
+        tool_call = create_function_call(
+            "call_1",
+            "set_current_location",
+            '{"location_id": 1}',
+        )
+        messages = [
+            ToolCallRequestEvent(source="agent", content=[tool_call]),
+            ToolCallExecutionEvent(
+                source="tool",
+                content=[
+                    FunctionExecutionResult(
+                        call_id="call_1",
+                        content='{"status": "ok"}',
+                        is_error=False,
+                        name="set_current_location",
+                    )
+                ],
+            ),
+            ToolCallSummaryMessage(source="agent", content='{"status": "ok"}'),
+            TextMessage(source="agent", content="Completed"),
+        ]
+
+        history = ConversationAdapter.extract_conversation_history(messages)
+
+        assert len(history) == 1
+        assert "tool_results" in history[0]
+        # Expect only one result despite summary message
+        assert len(history[0]["tool_results"]) == 1
