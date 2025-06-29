@@ -230,7 +230,13 @@ class BatchProcessor:
         return job.results
     
     async def run_batch(self, batch_id: str, progress_callback: Optional[Callable] = None) -> Dict[str, Any]:
-        """Run a batch job with parallel processing"""
+        """Run a batch job with parallel processing.
+
+        Returns:
+            Summary information where each result item contains a
+            `conversation_history` list of `ConversationHistoryItem`
+            dictionaries. See `docs/contracts/dto/conversation_history_item.md`.
+        """
         
         if batch_id not in self.active_jobs:
             raise ValueError(f"Batch job {batch_id} not found")

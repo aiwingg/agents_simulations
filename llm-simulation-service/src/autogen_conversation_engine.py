@@ -157,7 +157,10 @@ class AutogenConversationEngine:
             timeout_sec: Timeout in seconds (optional)
             
         Returns:
-            Dictionary matching existing ConversationEngine output contract
+            Dictionary matching existing ConversationEngine output contract.
+            The `conversation_history` value is a list of
+            `ConversationHistoryItem` dictionaries as described in
+            `docs/contracts/dto/conversation_history_item.md`.
         """
         self.logger.log_info(f"Running basic conversation via AutoGen Swarm", extra_data={
             'scenario': scenario.get('name', 'unknown'),
@@ -211,7 +214,10 @@ class AutogenConversationEngine:
             timeout_sec: Timeout in seconds (optional)
             
         Returns:
-            Dictionary matching existing ConversationEngine output contract
+            Dictionary matching existing ConversationEngine output contract.
+            The `conversation_history` value is a list of
+            `ConversationHistoryItem` dictionaries. See
+            `docs/contracts/dto/conversation_history_item.md` for details.
         """
         max_turns = max_turns or Config.MAX_TURNS
         timeout_sec = timeout_sec or Config.TIMEOUT_SEC
