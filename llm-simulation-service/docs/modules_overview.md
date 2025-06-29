@@ -13,8 +13,7 @@ This document provides a comprehensive mapping of all source code modules to the
 | `src/routes/prompt_spec_routes.py` | Presentation | REST endpoints for prompt specification management | [HTTP API OpenAPI](contracts/http_api_openapi.yaml) |
 | `src/routes/user.py` | Presentation | User management and authentication routes | [HTTP API OpenAPI](contracts/http_api_openapi.yaml) |
 | **Service Layer - Business Logic** |
-| `src/conversation_engine.py` | Service | Multi-agent conversation orchestration and handoff management | [Conversation Engine Contract](contracts/service_layer_contracts/conversation_engine_contract.md) |
-| `src/autogen_conversation_engine.py` | Service | AutoGen-based engine implementing the same contract | [AutogenConversationEngine Contract](contracts/service_layer_contracts/autogen_conversation_engine_contract.md) |
+| `src/autogen_conversation_engine.py` | Service | Conversation engine based on AutoGen Swarm pattern | [Conversation Engine Contract](contracts/service_layer_contracts/conversation_engine_contract.md) |
 | `src/conversation_adapter.py` | Service | Format translation between AutoGen and existing results | [ConversationAdapter Contract](contracts/service_layer_contracts/conversation_adapter_contract.md) |
 | `src/batch_processor.py` | Service | Parallel batch processing and workflow coordination | [Batch Processor Contract](contracts/service_layer_contracts/batch_processor_contract.md) |
 | `src/evaluator.py` | Service | Conversation scoring and quality assessment logic | [Evaluator Contract](contracts/service_layer_contracts/evaluator_contract.md) |
@@ -53,8 +52,7 @@ This document provides a comprehensive mapping of all source code modules to the
 - Communicates with Infrastructure Layer through port interfaces
 
 **Key Modules**:
-- Conversation orchestration (`conversation_engine.py`)
-- AutoGen conversation engine (`autogen_conversation_engine.py`)
+- Conversation engine (`autogen_conversation_engine.py`)
 - Conversation adapter (`conversation_adapter.py`)
 - Batch processing coordination (`batch_processor.py`)
 - Quality assessment (`evaluator.py`)

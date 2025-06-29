@@ -40,7 +40,7 @@ graph TB
     end
     
     subgraph "Service Layer"
-        CE[Conversation Engine<br/>conversation_engine.py]
+        CE[Conversation Engine<br/>autogen_conversation_engine.py]
         BP[Batch Processor<br/>batch_processor.py]
         EV[Evaluator<br/>evaluator.py]
         PS[Prompt Specification<br/>prompt_specification.py]

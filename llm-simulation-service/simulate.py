@@ -16,7 +16,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
 
 from src.config import Config
 from src.openai_wrapper import OpenAIWrapper
-from src.conversation_engine import ConversationEngine
+from src.autogen_conversation_engine import AutogenConversationEngine
 from src.evaluator import ConversationEvaluator
 from src.batch_processor import BatchProcessor
 from src.result_storage import ResultStorage
@@ -80,7 +80,7 @@ async def run_single_scenario(scenario: Dict[str, Any], output_dir: str, stream:
     
     logger = get_logger()
     openai_wrapper = OpenAIWrapper(Config.OPENAI_API_KEY)
-    conversation_engine = ConversationEngine(openai_wrapper, prompt_spec_name)
+    conversation_engine = AutogenConversationEngine(openai_wrapper, prompt_spec_name)
     evaluator = ConversationEvaluator(openai_wrapper, prompt_spec_name)
     
     scenario_name = scenario.get('name', 'unknown')

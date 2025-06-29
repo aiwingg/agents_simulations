@@ -83,7 +83,7 @@ llm-simulation-service/
 │   ├── main.py                   # Flask app entry point
 │   ├── config.py                 # Configuration management
 │   ├── openai_wrapper.py         # OpenAI API integration
-│   ├── conversation_engine.py    # Conversation orchestration
+│   ├── autogen_conversation_engine.py    # Conversation orchestration
 │   ├── evaluator.py              # Scoring system
 │   ├── batch_processor.py        # Parallel processing
 │   ├── result_storage.py         # Export and reporting
