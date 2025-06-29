@@ -2,6 +2,7 @@
 AutogenModelClient - Infrastructure Layer
 Single entry point for creating OpenAI completion clients for AutoGen usage
 """
+import os
 from autogen_ext.models.openai import OpenAIChatCompletionClient
 from src.openai_wrapper import OpenAIWrapper
 from src.logging_utils import get_logger
@@ -36,11 +37,19 @@ class AutogenModelClientFactory:
             api_key=api_key
         )
 
-        client._client = wrap_openai(client._client)
-        
-        logger.log_info(f"Created AutoGen client", extra_data={
-            'model': model,
-            'engine_type': 'AutoGen'
-        })
+        # Only enable Braintrust tracing if BRAINTRUST_API_KEY is provided
+        if os.getenv('BRAINTRUST_API_KEY'):
+            client._client = wrap_openai(client._client)
+            logger.log_info(f"Created AutoGen client with Braintrust tracing enabled", extra_data={
+                'model': model,
+                'engine_type': 'AutoGen',
+                'tracing_enabled': True
+            })
+        else:
+            logger.log_info(f"Created AutoGen client without tracing", extra_data={
+                'model': model,
+                'engine_type': 'AutoGen',
+                'tracing_enabled': False
+            })
         
         return client 
