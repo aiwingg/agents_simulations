@@ -14,12 +14,17 @@ This document provides a comprehensive mapping of all source code modules to the
 | `src/routes/user.py` | Presentation | User management and authentication routes | [HTTP API OpenAPI](contracts/http_api_openapi.yaml) |
 | **Service Layer - Business Logic** |
 | `src/conversation_engine.py` | Service | Multi-agent conversation orchestration and handoff management | [Conversation Engine Contract](contracts/service_layer_contracts/conversation_engine_contract.md) |
+| `src/autogen_conversation_engine.py` | Service | AutoGen-based engine implementing the same contract | [AutogenConversationEngine Contract](contracts/service_layer_contracts/autogen_conversation_engine_contract.md) |
+| `src/conversation_adapter.py` | Service | Format translation between AutoGen and existing results | [ConversationAdapter Contract](contracts/service_layer_contracts/conversation_adapter_contract.md) |
 | `src/batch_processor.py` | Service | Parallel batch processing and workflow coordination | [Batch Processor Contract](contracts/service_layer_contracts/batch_processor_contract.md) |
 | `src/evaluator.py` | Service | Conversation scoring and quality assessment logic | [Evaluator Contract](contracts/service_layer_contracts/evaluator_contract.md) |
 | `src/prompt_specification.py` | Service | Agent configuration and prompt management logic | [Prompt Specification Contract](contracts/specification_contracts/prompt_specification_contract.md) |
 | `src/tools_specification.py` | Service | Tool definition and handoff rule management | [Tools Specification Contract](contracts/specification_contracts/tools_specification_contract.md) |
 | **Infrastructure Layer - External Adapters** |
 | `src/openai_wrapper.py` | Infrastructure | OpenAI API adapter for LLM interactions | [OpenAI Wrapper Contract](contracts/infra_util_contracts/openai_wrapper_contract.md) |
+| `src/autogen_model_client.py` | Infrastructure | Creates AutoGen-compatible clients | [AutogenModelClientFactory Contract](contracts/infra_util_contracts/autogen_model_client_contract.md) |
+| `src/autogen_mas_factory.py` | Infrastructure | Builds Swarm teams from specifications | [AutogenMASFactory Contract](contracts/infra_util_contracts/autogen_mas_factory_contract.md) |
+| `src/autogen_tools.py` | Infrastructure | Session-aware tool factory and classes | [AutogenToolFactory Contract](contracts/infra_util_contracts/autogen_tool_factory_contract.md) |
 | `src/persistent_storage.py` | Infrastructure | File system adapter for batch metadata persistence | [Persistent Storage Contract](contracts/storage_contracts/persistent_storage_contract.md) |
 | `src/result_storage.py` | Infrastructure | File system adapter for conversation results export | [Result Storage Contract](contracts/storage_contracts/result_storage_contract.md) |
 | `src/tool_emulator.py` | Infrastructure | External tool API adapter for business function simulation | [Tool Emulator Contract](contracts/infra_util_contracts/tool_emulator_contract.md) |
@@ -40,7 +45,7 @@ This document provides a comprehensive mapping of all source code modules to the
 - Route handlers (`batch_routes.py`, `prompt_spec_routes.py`, `user.py`)
 - Application entry point (`main.py`)
 
-### Service Layer (5 modules)  
+### Service Layer (7 modules)
 **Purpose**: Core business logic and workflow orchestration  
 **Characteristics**:
 - Pure business logic with no external system access
@@ -49,11 +54,13 @@ This document provides a comprehensive mapping of all source code modules to the
 
 **Key Modules**:
 - Conversation orchestration (`conversation_engine.py`)
-- Batch processing coordination (`batch_processor.py`) 
+- AutoGen conversation engine (`autogen_conversation_engine.py`)
+- Conversation adapter (`conversation_adapter.py`)
+- Batch processing coordination (`batch_processor.py`)
 - Quality assessment (`evaluator.py`)
 - Configuration management (`prompt_specification.py`, `tools_specification.py`)
 
-### Infrastructure Layer (7 modules)
+### Infrastructure Layer (10 modules)
 **Purpose**: External system integration and technical concerns  
 **Characteristics**:
 - Adapts external APIs, file systems, and databases
@@ -61,9 +68,12 @@ This document provides a comprehensive mapping of all source code modules to the
 - Handles all cross-cutting technical concerns
 
 **Key Modules**:
-- External API adapters (`openai_wrapper.py`, `tool_emulator.py`, `webhook_manager.py`)
+- External API adapters (`openai_wrapper.py`, `autogen_model_client.py`, `webhook_manager.py`)
+- Swarm team factory (`autogen_mas_factory.py`)
+- Tool factory and classes (`autogen_tools.py`)
 - Storage adapters (`persistent_storage.py`, `result_storage.py`)
 - Technical infrastructure (`logging_utils.py`, `config.py`)
+- Tool emulator (`tool_emulator.py`)
 - Data models (`models/user.py`)
 
 ## Navigation Guide

@@ -63,7 +63,7 @@ The Infrastructure Layer provides all external system integrations and technical
 - Network error handling and timeouts
 
 ### Logging Utils
-**File**: `src/logging_utils.py`  
+**File**: `src/logging_utils.py`
 **Adapts**: File system for structured logging and monitoring  
 **Infrastructure Concerns**:
 - Log file management and rotation
@@ -71,6 +71,28 @@ The Infrastructure Layer provides all external system integrations and technical
 - Multiple log stream management (app, conversation, API)
 - Log level configuration and filtering
 - Performance monitoring and metrics collection
+
+### Autogen Model Client Factory
+**File**: `src/autogen_model_client.py`
+**Adapts**: OpenAIWrapper configuration into AutoGen-compatible clients
+**Infrastructure Concerns**:
+- Centralized OpenAI client creation
+- Automatic Braintrust wrapping for observability
+
+### Autogen MAS Factory
+**File**: `src/autogen_mas_factory.py`
+**Adapts**: AutoGen Swarm team creation
+**Infrastructure Concerns**:
+- Builds `AssistantAgent` objects from prompt specifications
+- Configures agent handoffs (user external)
+- Applies combined termination conditions for cost control
+
+### Autogen Tool Factory
+**File**: `src/autogen_tools.py`
+**Adapts**: Tool specification into AutoGen tools with session isolation
+**Infrastructure Concerns**:
+- Creates tool instances bound to a conversation session
+- Maps specification names to concrete `BaseTool` classes
 
 ## Configuration Management
 
