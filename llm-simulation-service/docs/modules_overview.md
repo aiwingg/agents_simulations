@@ -26,8 +26,6 @@ This document provides a comprehensive mapping of all source code modules to the
 | `src/webhook_manager.py` | Infrastructure | External webhook API adapter for client data retrieval | [Webhook Manager Contract](contracts/infra_util_contracts/webhook_manager_contract.md) |
 | `src/logging_utils.py` | Infrastructure | Structured logging and monitoring infrastructure | [Logging Utils Contract](contracts/infra_util_contracts/logging_utils_contract.md) |
 | `src/config.py` | Infrastructure | Environment configuration and settings management | [Configuration System](configuration/config_system.md) |
-| **Data Models** |
-| `src/models/user.py` | Infrastructure | User data model definitions | [Data Models Contract](contracts/data_models_contract.md) |
 
 ## Layer Summary
 
