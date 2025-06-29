@@ -49,7 +49,10 @@ class ConversationAdapter:
             prompt_spec: Optional prompt specification used for display names
             
         Returns:
-            Dictionary matching existing ConversationEngine output contract
+            Dictionary matching existing ConversationEngine output contract. The
+            `conversation_history` field is a list of
+            `ConversationHistoryItem` dictionaries defined in
+            `docs/contracts/dto/conversation_history_item.md`.
         """
         logger = get_logger()
         
@@ -131,7 +134,9 @@ class ConversationAdapter:
             messages: List of AutoGen BaseChatMessage instances
             
         Returns:
-            List of conversation history entries in existing contract format
+            List of conversation history entries in existing contract format.
+            Each entry is a `ConversationHistoryItem` dictionary described in
+            `docs/contracts/dto/conversation_history_item.md`.
         """
         logger = get_logger()
         conversation_history = []
