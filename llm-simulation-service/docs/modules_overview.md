@@ -94,6 +94,10 @@ This document provides a comprehensive mapping of all source code modules to the
 2. **Storage Contracts** - Data persistence and export contracts
 3. **Utility Contracts** - Logging, monitoring, and cross-cutting concerns
 
+### Result Formats
+Conversation and batch results include a `status` field indicating completion state.
+Possible values are `completed`, `failed`, `failed_api_blocked`, and `timeout`.
+
 ## Module Dependencies
 
 ### Dependency Flow

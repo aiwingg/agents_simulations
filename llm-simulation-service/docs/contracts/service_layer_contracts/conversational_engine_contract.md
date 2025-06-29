@@ -41,7 +41,7 @@ async def run_conversation(
 {
     'session_id': str,           # Unique session identifier
     'scenario': str,             # Scenario name
-    'status': str,               # 'completed' | 'failed'
+    'status': str,               # 'completed' | 'failed' | 'timeout' | 'failed_api_blocked'
     'total_turns': int,          # Number of conversation turns
     'duration_seconds': float,   # Conversation duration
     'conversation_history': List[Dict],  # Turn-by-turn conversation
@@ -223,7 +223,7 @@ else:
 - Geographic API restrictions: Returns `status: 'failed_api_blocked'` with graceful degradation
 - Tool call failures: Logged but don't stop conversation
 - Agent handoff failures: Logged with detailed context
-- Timeout and turn limit enforcement
+- Timeout and turn limit enforcement returns `status: 'timeout'` with collected history
 
 ### Session Management
 

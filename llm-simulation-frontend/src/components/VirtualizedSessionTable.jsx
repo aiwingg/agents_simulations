@@ -161,6 +161,7 @@ const VirtualizedSessionTable = ({ sessions = [], onSessionClick, onExport }) =>
             <MenuItem value="all">All Status</MenuItem>
             <MenuItem value="completed">Completed</MenuItem>
             <MenuItem value="failed">Failed</MenuItem>
+            <MenuItem value="timeout">Timeout</MenuItem>
             <MenuItem value="running">Running</MenuItem>
           </Select>
         </FormControl>

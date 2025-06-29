@@ -443,25 +443,30 @@ class AutogenConversationEngine:
             except asyncio.TimeoutError:
                 end_time = time.time()
                 duration = end_time - start_time
-                
-                self.logger.log_error(f"AutoGen conversation timeout after {timeout_sec} seconds", extra_data={
-                    'session_id': session_id,
-                    'timeout_sec': timeout_sec,
-                    'actual_duration': duration,
-                    'scenario_name': scenario_name,
-                    'completed_turns': turn_count
-                })
-                
+
+                self.logger.log_error(
+                    f"AutoGen conversation timeout after {timeout_sec} seconds",
+                    extra_data={
+                        'session_id': session_id,
+                        'timeout_sec': timeout_sec,
+                        'actual_duration': duration,
+                        'scenario_name': scenario_name,
+                        'completed_turns': turn_count
+                    }
+                )
+
+                history = ConversationAdapter.extract_conversation_history(all_messages)
+
                 # Return timeout result in contract format
                 return {
                     'session_id': session_id,
                     'scenario': scenario_name,
-                    'status': 'failed',
+                    'status': 'timeout',
                     'error': f'Conversation timeout after {timeout_sec} seconds',
                     'error_type': 'TimeoutError',
                     'total_turns': turn_count,
                     'duration_seconds': duration,
-                    'conversation_history': [],
+                    'conversation_history': history,
                     'start_time': datetime.fromtimestamp(start_time).isoformat(),
                     'end_time': datetime.fromtimestamp(end_time).isoformat(),
                     'tools_used': True
