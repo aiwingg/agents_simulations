@@ -227,7 +227,7 @@ class TestConversationAdapter:
         assert tool_entry["tool_results"][0]["products"][0]["code"] == "BEEF001"
 
     def test_merge_tool_events_with_final_message(self):
-        """Tool calls, executions and summaries should merge into the next agent message."""
+        """Tool calls and executions should merge into the next agent message. ToolCallSummaryMessage is skipped."""
         tool_call = create_function_call(
             "call_1", "set_current_location", '{"location_id": 347881}'
         )
@@ -475,7 +475,7 @@ class TestConversationAdapter:
         assert tool_results[0] == "not valid json {}"  # Should be stored as string
 
     def test_tool_results_not_duplicated(self):
-        """Results from execution and summary events should not duplicate."""
+        """Results from execution events are preserved. ToolCallSummaryMessage is skipped to avoid duplication."""
         tool_call = create_function_call(
             "call_1",
             "set_current_location",

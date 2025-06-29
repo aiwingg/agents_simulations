@@ -171,13 +171,16 @@ class ConversationAdapter:
                 # Skip system messages as they're not part of conversation flow
                 if hasattr(message, "source") and message.source == "system":
                     continue
+                
+                # Skip ToolCallSummaryMessage as it contains redundant information
+                if isinstance(message, ToolCallSummaryMessage):
+                    continue
 
                 is_tool_event = isinstance(
                     message,
                     (
                         ToolCallRequestEvent,
                         ToolCallExecutionEvent,
-                        ToolCallSummaryMessage,
                     ),
                 )
 
@@ -212,9 +215,7 @@ class ConversationAdapter:
                             pending_speaker = None
                             pending_display_name = None
 
-                    if isinstance(message, ToolCallRequestEvent) or isinstance(
-                        message, ToolCallSummaryMessage
-                    ):
+                    if isinstance(message, ToolCallRequestEvent):
                         pending_speaker = speaker
                         agent_id = getattr(message, "source", None)
                         if agent_id and agent_id in display_name_map:
@@ -237,9 +238,7 @@ class ConversationAdapter:
                     if tool_calls:
                         pending_calls.extend(tool_calls)
                     if tool_results:
-                        for result in tool_results:
-                            if result not in pending_results:
-                                pending_results.append(result)
+                        pending_results.extend(tool_results)
 
                     continue
 
@@ -356,9 +355,7 @@ class ConversationAdapter:
         elif isinstance(message, ToolCallExecutionEvent):
             # For tool execution events, return summary
             return "[TOOL EXECUTION]"
-        elif isinstance(message, ToolCallSummaryMessage):
-            # For tool summary messages, return the content
-            return getattr(message, "content", "") or ""
+
         elif isinstance(message, HandoffMessage):
             # For handoff messages, return handoff info
             target = getattr(message, "target", "unknown")
@@ -414,18 +411,7 @@ class ConversationAdapter:
                     except json.JSONDecodeError:
                         # If not JSON, store as string
                         tool_results.append(result_content)
-        elif isinstance(message, ToolCallSummaryMessage):
-            # Extract tool results from ToolCallSummaryMessage
-            if hasattr(message, "content"):
-                try:
-                    # Try to parse as JSON first
-                    if isinstance(message.content, str):
-                        tool_results = [json.loads(message.content)]
-                    else:
-                        tool_results = [message.content]
-                except json.JSONDecodeError:
-                    # If not JSON, store as string
-                    tool_results = [message.content]
+
 
         return tool_calls, tool_results
 
