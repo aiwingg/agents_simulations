@@ -52,12 +52,8 @@ Business logic for managing agent specifications and conversation configurations
 ## Core Components
 
 ### Conversation Engine
-**File**: `src/conversation_engine.py`
-**Business Logic Coverage**: Multi-agent conversation orchestration, handoff logic, and tool coordination workflows. Manages agent context switching and conversation flow control.
-
-### Autogen Conversation Engine
 **File**: `src/autogen_conversation_engine.py`
-**Business Logic Coverage**: AutoGen-based implementation of the ConversationEngine contract. Uses Swarm teams, external user simulation, and centralized client/tool factories.
+**Business Logic Coverage**: Implements the ConversationEngine contract using AutoGen's Swarm pattern with external user simulation and centralized client/tool factories.
 
 ### Batch Processor
 **File**: `src/batch_processor.py`  

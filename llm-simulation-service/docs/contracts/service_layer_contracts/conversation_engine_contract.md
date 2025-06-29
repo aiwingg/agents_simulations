@@ -1,6 +1,6 @@
-# AutogenConversationEngine Contract
+# ConversationEngine Contract
 
-AutoGen-based implementation of `ConversationEngine` with the same public API.
+Implemented via the `AutogenConversationEngine` class using AutoGen's Swarm pattern.
 
 ## Constructor
 `AutogenConversationEngine(openai_wrapper: OpenAIWrapper, prompt_spec_name: str = 'default_prompts')`
