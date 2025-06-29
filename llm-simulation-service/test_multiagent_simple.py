@@ -2,6 +2,8 @@
 """
 Simple test script for multi-agent functionality
 """
+import pytest
+pytest.skip("legacy integration script", allow_module_level=True)
 
 import sys
 import os

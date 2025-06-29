@@ -12,8 +12,6 @@ from dataclasses import dataclass, asdict, field
 from enum import Enum
 from src.config import Config
 from src.openai_wrapper import OpenAIWrapper
-from src.conversation_engine import ConversationEngine
-from src.evaluator import ConversationEvaluator
 from src.logging_utils import get_logger
 from src.persistent_storage import PersistentBatchStorage
 
@@ -63,8 +61,6 @@ class BatchProcessor:
         
         # Initialize components
         self.openai_wrapper = OpenAIWrapper(openai_api_key)
-        self.conversation_engine = None
-        self.evaluator = None
         
         # Initialize persistent storage
         self.persistent_storage = PersistentBatchStorage()
@@ -244,14 +240,15 @@ class BatchProcessor:
         if job.status != BatchStatus.PENDING:
             raise ValueError(f"Batch job {batch_id} is not in pending status")
         
-        # Initialize conversation engine and evaluator with the specific prompt specification
-        from src.conversation_engine import ConversationEngine
+        # Load required classes lazily to avoid circular imports
+        from src.autogen_conversation_engine import AutogenConversationEngine
         from src.evaluator import ConversationEvaluator
-        
-        self.conversation_engine = ConversationEngine(self.openai_wrapper, job.prompt_spec_name)
-        self.evaluator = ConversationEvaluator(self.openai_wrapper, job.prompt_spec_name)
-        
-        self.logger.log_info(f"Initialized conversation engine and evaluator with prompt spec: {job.prompt_spec_name}")
+
+        self.logger.log_info(
+            f"Using prompt specification {job.prompt_spec_name} for batch", extra_data={
+                'batch_id': batch_id
+            }
+        )
         
         # Update job status
         job.status = BatchStatus.RUNNING
@@ -365,11 +362,11 @@ class BatchProcessor:
             
             raise e
     
-    async def _process_single_scenario(self, scenario: Dict[str, Any], scenario_index: int, 
+    async def _process_single_scenario(self, scenario: Dict[str, Any], scenario_index: int,
                                      batch_id: str, progress_callback: Optional[Callable] = None,
                                      progress_lock: asyncio.Lock = None) -> Dict[str, Any]:
         """Process a single scenario with conversation and evaluation"""
-        
+
         async with self.semaphore:  # Limit concurrency
             try:
                 scenario_name = scenario.get('name', f'scenario_{scenario_index}')
@@ -381,25 +378,33 @@ class BatchProcessor:
                 
                 # Run conversation (with or without tools based on batch setting)
                 job = self.active_jobs[batch_id]
-                
-                # Safety check for conversation engine
-                if self.conversation_engine is None:
-                    raise ValueError("ConversationEngine is not initialized")
+
+                # Create isolated conversation engine and evaluator per scenario
+                from src.autogen_conversation_engine import AutogenConversationEngine
+                from src.evaluator import ConversationEvaluator
+
+                conversation_engine = AutogenConversationEngine(self.openai_wrapper, job.prompt_spec_name)
+                evaluator = ConversationEvaluator(self.openai_wrapper, job.prompt_spec_name)
+
+                self.logger.log_info(
+                    "Initialized new ConversationEngine for scenario",
+                    extra_data={'batch_id': batch_id, 'scenario_index': scenario_index}
+                )
 
                 # Update progress: Conversation in progress
                 await self._update_sub_progress(batch_id, scenario_index, "conversation", progress_lock)
-                
+
                 if job.use_tools:
-                    conversation_result = await self.conversation_engine.run_conversation_with_tools(scenario)
+                    conversation_result = await conversation_engine.run_conversation_with_tools(scenario)
                 else:
-                    conversation_result = await self.conversation_engine.run_conversation(scenario)
-                
+                    conversation_result = await conversation_engine.run_conversation(scenario)
+
                 # Update progress: Evaluation in progress
                 await self._update_sub_progress(batch_id, scenario_index, "evaluation", progress_lock)
-                
+
                 # Evaluate conversation if successful
                 if conversation_result.get('status') == 'completed':
-                    evaluation_result = await self.evaluator.evaluate_conversation(conversation_result)
+                    evaluation_result = await evaluator.evaluate_conversation(conversation_result)
                     
                     # Combine results
                     combined_result = {
@@ -432,6 +437,26 @@ class BatchProcessor:
                         'graceful_degradation': True,
                         'partial_completion': conversation_result.get('partial_completion', False)
                     }
+                elif conversation_result.get('status') == 'timeout':
+                    # Conversation timed out but may contain partial history
+                    # Still run evaluation to score the partial conversation
+                    evaluation_result = await evaluator.evaluate_conversation(conversation_result)
+
+                    combined_result = {
+                        'scenario_index': scenario_index,
+                        'scenario': scenario_name,
+                        'session_id': conversation_result.get('session_id'),
+                        'status': 'timeout',
+                        'error': conversation_result.get('error'),
+                        'total_turns': conversation_result.get('total_turns', 0),
+                        'duration_seconds': conversation_result.get('duration_seconds'),
+                        'score': evaluation_result.get('score'),
+                        'comment': evaluation_result.get('comment'),
+                        'evaluation_status': evaluation_result.get('evaluation_status'),
+                        'start_time': conversation_result.get('start_time'),
+                        'end_time': conversation_result.get('end_time'),
+                        'conversation_history': conversation_result.get('conversation_history', [])
+                    }
                 else:
                     # Conversation failed
                     combined_result = {
@@ -451,9 +476,9 @@ class BatchProcessor:
                 # Update progress
                 if progress_callback:
                     if asyncio.iscoroutinefunction(progress_callback):
-                        await progress_callback(batch_id, scenario_index + 1)
+                        await progress_callback(scenario_index + 1, job.total_scenarios)
                     else:
-                        progress_callback(batch_id, scenario_index + 1)
+                        progress_callback(scenario_index + 1, job.total_scenarios)
                 
                 # Update progress in batch job and save to storage (thread-safe)
                 if progress_lock:
@@ -483,8 +508,8 @@ class BatchProcessor:
                     'error_type': type(e).__name__,
                     'error_message': str(e),
                     'scenario_name': scenario.get('name', 'unknown'),
-                    'conversation_engine_initialized': self.conversation_engine is not None,
-                    'evaluator_initialized': self.evaluator is not None
+                    'conversation_engine_initialized': True,
+                    'evaluator_initialized': True
                 }
                 self.logger.log_error(f"Failed to process scenario {scenario_index}", exception=e, extra_data=error_context)
                 raise e

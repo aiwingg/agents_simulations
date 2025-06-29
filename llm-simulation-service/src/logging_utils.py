@@ -95,6 +95,12 @@ class SimulationLogger:
             message = f"{message} - {json.dumps(extra_data, ensure_ascii=False)}"
         self.app_logger.info(message)
     
+    def log_warning(self, message: str, extra_data: Optional[Dict[str, Any]] = None):
+        """Log warning message"""
+        if extra_data:
+            message = f"{message} - {json.dumps(extra_data, ensure_ascii=False)}"
+        self.app_logger.warning(message)
+    
     def log_error(self, message: str, exception: Optional[Exception] = None, extra_data: Optional[Dict[str, Any]] = None):
         """Log error message"""
         if extra_data:

@@ -1,0 +1,171 @@
+openapi: 3.1.0
+info:
+  title: LLM Simulation Service API
+  version: '1.0'
+paths:
+  /api/health:
+    get:
+      summary: Health check
+      responses:
+        '200':
+          description: Service is healthy
+  /api/batches:
+    post:
+      summary: Launch new batch
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                scenarios:
+                  type: array
+                  items: {type: object}
+              required: [scenarios]
+      responses:
+        '200': {description: Batch launched}
+    get:
+      summary: List batches
+      responses:
+        '200': {description: Batch list}
+  /api/batches/{id}:
+    get:
+      summary: Get batch status
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: {type: string}
+      responses:
+        '200': {description: Batch status}
+  /api/batches/{id}/results:
+    get:
+      summary: Download batch results
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: {type: string}
+        - in: query
+          name: format
+          schema: {type: string}
+      responses:
+        '200':
+          description: Results
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  conversation_history:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ConversationHistoryItem'
+  /api/batches/{id}/summary:
+    get:
+      summary: Batch summary
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: {type: string}
+      responses:
+        '200':
+          description: Summary
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  conversation_history:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ConversationHistoryItem'
+  /api/batches/{id}/cost:
+    get:
+      summary: Cost estimate
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: {type: string}
+      responses:
+        '200': {description: Cost info}
+  /api/prompt-specs:
+    get:
+      summary: List prompt specifications
+      responses:
+        '200': {description: Specs list}
+  /api/prompt-specs/{name}:
+    get:
+      summary: Get specification
+      parameters:
+        - in: path
+          name: name
+          required: true
+          schema: {type: string}
+      responses:
+        '200': {description: Spec data}
+    post:
+      summary: Create specification
+      responses:
+        '201': {description: Created}
+    put:
+      summary: Update specification
+      responses:
+        '200': {description: Updated}
+    delete:
+      summary: Delete specification
+      responses:
+        '200': {description: Deleted}
+  /api/prompt-specs/{name}/validate:
+    post:
+      summary: Validate specification
+      responses:
+        '200': {description: Validation result}
+  /api/prompt-specs/{name}/duplicate:
+    post:
+      summary: Duplicate specification
+      responses:
+        '201': {description: Duplicated}
+  /api/users:
+    get:
+      summary: List users
+      responses:
+        '200': {description: Users list}
+    post:
+      summary: Create user
+      responses:
+        '201': {description: User created}
+  /api/users/{user_id}:
+    get:
+      summary: Get user
+      responses:
+        '200': {description: User data}
+    put:
+      summary: Update user
+      responses:
+        '200': {description: User updated}
+    delete:
+      summary: Delete user
+      responses:
+        '204': {description: Deleted}
+
+components:
+  schemas:
+    ConversationHistoryItem:
+      type: object
+      properties:
+        turn: {type: integer}
+        speaker: {type: string}
+        speaker_display: {type: string}
+        content: {type: string}
+        timestamp: {type: string}
+        tool_calls:
+          type: array
+          items: {type: object}
+        tool_results:
+          type: array
+          items: {}
+      required: [turn, speaker, content, timestamp]

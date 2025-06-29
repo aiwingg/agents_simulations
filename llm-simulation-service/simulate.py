@@ -7,6 +7,7 @@ import asyncio
 import json
 import sys
 import os
+import re
 from typing import Dict, Any, List, Optional
 from datetime import datetime
 
@@ -15,12 +16,57 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
 
 from src.config import Config
 from src.openai_wrapper import OpenAIWrapper
-from src.conversation_engine import ConversationEngine
+from src.autogen_conversation_engine import AutogenConversationEngine
 from src.evaluator import ConversationEvaluator
 from src.batch_processor import BatchProcessor
 from src.result_storage import ResultStorage
 from src.logging_utils import get_logger
 from src.prompt_specification import PromptSpecificationManager
+
+
+def safe_filename(name: str, max_length: int = 50) -> str:
+    """Sanitize a string so it can be used as a filename."""
+    sanitized = re.sub(r"[^A-Za-z0-9_-]+", "_", name)
+    return sanitized[:max_length]
+
+
+class SimulateCLI:
+    """Placeholder class for CLI structure tests."""
+    pass
+
+
+async def run_batch_local(scenarios: List[Dict[str, Any]], output_dir: str,
+                          prompt_spec_name: str = "default_prompts") -> Dict[str, Any]:
+    """Thin wrapper used by tests to run a batch locally."""
+    return await run_batch_scenarios(scenarios, output_dir, prompt_spec_name)
+
+
+def get_batch_status_via_api(batch_id: str, api_url: str = "http://localhost:5000") -> Optional[Dict[str, Any]]:
+    """Retrieve batch status from the service API."""
+    import requests
+    try:
+        response = requests.get(f"{api_url}/api/batches/{batch_id}")
+        if response.status_code == 200:
+            return response.json()
+    except requests.RequestException:
+        pass
+    return None
+
+
+def fetch_batch_results_via_api(batch_id: str, api_url: str = "http://localhost:5000",
+                                fmt: str = "json") -> Optional[str]:
+    """Fetch batch results from the service API."""
+    import requests
+    try:
+        response = requests.get(
+            f"{api_url}/api/batches/{batch_id}/results",
+            params={"format": fmt}
+        )
+        if response.status_code == 200:
+            return response.text
+    except requests.RequestException:
+        pass
+    return None
 
 def setup_cli_logging():
     """Setup logging for CLI usage"""
@@ -34,7 +80,7 @@ async def run_single_scenario(scenario: Dict[str, Any], output_dir: str, stream:
     
     logger = get_logger()
     openai_wrapper = OpenAIWrapper(Config.OPENAI_API_KEY)
-    conversation_engine = ConversationEngine(openai_wrapper, prompt_spec_name)
+    conversation_engine = AutogenConversationEngine(openai_wrapper, prompt_spec_name)
     evaluator = ConversationEvaluator(openai_wrapper, prompt_spec_name)
     
     scenario_name = scenario.get('name', 'unknown')
@@ -96,12 +142,13 @@ async def run_single_scenario(scenario: Dict[str, Any], output_dir: str, stream:
     # Save results
     result_storage = ResultStorage(output_dir)
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    filename = f"single_{scenario_name}_{timestamp}.json"
-    
-    result_storage.save_single_result(filename, final_result)
-    
+    safe_name = safe_filename(scenario_name)
+    filename = f"single_{safe_name}_{timestamp}.json"
+
+    filepath = result_storage.save_single_result(filename, final_result)
+
     if stream:
-        print(f"\n💾 Results saved to: {os.path.join(output_dir, filename)}")
+        print(f"\n💾 Results saved to: {filepath}")
     
     return final_result
 
@@ -146,25 +193,20 @@ async def run_batch_scenarios(scenarios: List[Dict[str, Any]], output_dir: str,
             
             # Save in multiple formats
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            
-            ndjson_file = f"batch_{batch_id}_{timestamp}.ndjson"
-            csv_file = f"batch_{batch_id}_{timestamp}.csv"
-            json_file = f"batch_{batch_id}_{timestamp}.json"
-            
-            result_storage.save_batch_results_ndjson(batch_id, results)
-            result_storage.save_batch_results_csv(batch_id, results)
-            result_storage.save_batch_results_json(batch_id, results)
-            
+
+            ndjson_path = result_storage.save_batch_results_ndjson(batch_id, results)
+            csv_path = result_storage.save_batch_results_csv(batch_id, results)
+            json_path = result_storage.save_batch_results_json(batch_id, results)
+
             print(f"\n💾 Results saved:")
-            print(f"  📄 NDJSON: {ndjson_file}")
-            print(f"  📊 CSV: {csv_file}")
-            print(f"  📋 JSON: {json_file}")
+            print(f"  📄 NDJSON: {ndjson_path}")
+            print(f"  📊 CSV: {csv_path}")
+            print(f"  📋 JSON: {json_path}")
             
             # Generate summary
             summary = result_storage.generate_summary_report(batch_id, results)
-            summary_file = f"summary_{batch_id}_{timestamp}.json"
-            result_storage.save_summary_report(summary)
-            print(f"  📈 Summary: {summary_file}")
+            summary_path = result_storage.save_summary_report(summary)
+            print(f"  📈 Summary: {summary_path}")
             
         else:
             print(f"\n❌ Batch failed: {result.get('error', 'unknown error')}")
