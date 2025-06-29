@@ -11,6 +11,8 @@ This document explains the workflow, quality bar, architecture rules and etiquet
 | **Plan**      | Once questions are answered, post a **numbered checklist** (≤ 10 steps) describing the exact changes you will make **with each item mapped to one of the three layers – presentation, service, infrastructure**. Wait for the maintainer’s message `Approved – implement X‑Y` before touching code.                                                                            |
 | **Implement** | Carry out the approved steps. After committing:<br>• Summarise what changed in plain language (no diff).<br>• Run the full test‑suite and any additional scripts named in the task’s *Success criteria*.<br>• If tests fail, post a short failure summary and a fix plan; wait for approval.<br>• After three consecutive unsuccessful fixes, stop and propose an alternative. |
 
+Important -- before implement, you should acquire confirmation of your plan from maintainer!
+
 ### Interaction Rules
 
 * **One clarifying question per message**—keep the loop tight.
