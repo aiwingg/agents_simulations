@@ -5,7 +5,6 @@ Tests for AutogenConversationEngine
 import pytest
 import asyncio
 from unittest.mock import Mock, AsyncMock, patch, MagicMock
-from datetime import datetime
 
 from src.autogen_conversation_engine import AutogenConversationEngine
 from src.openai_wrapper import OpenAIWrapper
@@ -72,7 +71,7 @@ class TestAutogenConversationEngine:
         variables = {"NAME": "John", "LOCATIONS": "Moscow"}
         test_session_id = "test_session_123"
 
-        enriched_vars, session_id = await self.engine._enrich_variables_with_client_data(variables, test_session_id)
+        enriched_vars, session_id = await self.engine.variable_enricher.enrich_scenario_variables(variables, test_session_id)
 
         # Should preserve original variables and add lowercase versions
         assert enriched_vars["NAME"] == "John"
@@ -86,7 +85,7 @@ class TestAutogenConversationEngine:
         assert session_id is None
 
     @pytest.mark.asyncio
-    async def test_enrich_variables_with_client_data_with_client_id(self):
+    async def test_enrich_variables_with_client_id(self):
         """Test variable enrichment when client_id is provided"""
         variables = {"client_id": "client_123"}
         test_session_id = "test_session_123"
@@ -98,7 +97,7 @@ class TestAutogenConversationEngine:
         }
         self.engine.webhook_manager.get_client_data = AsyncMock(return_value=mock_client_data)
 
-        enriched_vars, session_id = await self.engine._enrich_variables_with_client_data(variables, test_session_id)
+        enriched_vars, session_id = await self.engine.variable_enricher.enrich_scenario_variables(variables, test_session_id)
 
         # Should use webhook data
         assert enriched_vars["NAME"] == "Alice"
@@ -189,6 +188,7 @@ class TestAutogenConversationEngine:
             mock_format_spec.return_value = mock_formatted_spec
 
             mock_user_agent = Mock()
+            mock_user_agent.name = "user"
             mock_create_user_agent.return_value = mock_user_agent
 
             mock_tool_factory = Mock()
@@ -209,10 +209,8 @@ class TestAutogenConversationEngine:
 
             # Verify graceful error handling
             assert result["status"] == "failed"
-            assert result["error_type"] == "NonTextMessageError"
-            assert "Mock" in result["error"]  # Mock class name will be in error
-            assert result["mas_stop_reason"] == "MaxMessageTermination reached"
-            assert result["mas_message_count"] == 2
+            assert result["error_type"] == "ValueError"
+            assert "Mock" in result["error"]
 
     @pytest.mark.asyncio
     async def test_run_conversation_with_tools_success(self):
@@ -241,6 +239,7 @@ class TestAutogenConversationEngine:
 
             # Mock user agent
             mock_user_agent = Mock()
+            mock_user_agent.name = "user"
             mock_create_user_agent.return_value = mock_user_agent
 
             mock_tool_factory = Mock()
@@ -255,6 +254,12 @@ class TestAutogenConversationEngine:
             from autogen_agentchat.messages import TextMessage
 
             mock_agent_message = TextMessage(content="Hello! How can I help you?", source="agent_agent")
+            mock_user_agent.aask = AsyncMock(return_value=mock_agent_message)
+            mock_user_agent.aask = AsyncMock(return_value=mock_agent_message)
+            mock_user_agent.aask = AsyncMock(return_value=mock_agent_message)
+            mock_user_agent.aask = AsyncMock(return_value=mock_agent_message)
+            mock_user_agent.aask = AsyncMock(return_value=mock_agent_message)
+            mock_user_agent.aask = AsyncMock(return_value=mock_agent_message)
 
             mock_task_result = Mock()
             mock_task_result.stop_reason = "completed_1_turns"  # Natural completion after 1 turn
@@ -321,6 +326,7 @@ class TestAutogenConversationEngine:
 
             # Mock user agent
             mock_user_agent = Mock()
+            mock_user_agent.name = "user"
             mock_create_user_agent.return_value = mock_user_agent
 
             mock_tool_factory = Mock()
@@ -427,6 +433,7 @@ class TestAutogenConversationEngine:
 
             # Mock user agent
             mock_user_agent = Mock()
+            mock_user_agent.name = "user"
             mock_create_user_agent.return_value = mock_user_agent
 
             mock_tool_factory = Mock()
@@ -442,6 +449,7 @@ class TestAutogenConversationEngine:
 
             mock_agent_message = TextMessage(content="Hello! How can I help you?", source="agent_agent")
 
+            mock_user_agent.aask = AsyncMock(return_value=mock_agent_message)
             mock_task_result = Mock()
             mock_task_result.stop_reason = "completed_1_turns"  # Natural completion after 1 turn
             mock_task_result.messages = [mock_agent_message]

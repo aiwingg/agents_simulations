@@ -1,9 +1,12 @@
 # ConversationEngine Contract
 
 Implemented via the `AutogenConversationEngine` class using AutoGen's Swarm pattern.
+The engine composes several helper services:
+`ScenarioVariableEnricher`, `ConversationOrchestrator`, and `ConversationErrorHandler`.
+These services may be injected via the constructor for testing.
 
 ## Constructor
-`AutogenConversationEngine(openai_wrapper: OpenAIWrapper, prompt_spec_name: str = 'default_prompts')`
+`AutogenConversationEngine(openai_wrapper: OpenAIWrapper, prompt_spec_name: str = 'default_prompts', variable_enricher: ScenarioVariableEnricher | None = None, orchestrator: ConversationOrchestrator | None = None, error_handler: ConversationErrorHandler | None = None)`
 
 ## Public Methods
 - `run_conversation(scenario: Dict[str, Any], max_turns: Optional[int] = None, timeout_sec: Optional[int] = None) -> Dict[str, Any>`

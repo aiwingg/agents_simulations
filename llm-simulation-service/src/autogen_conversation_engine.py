@@ -6,12 +6,9 @@ Replaces the existing ConversationEngine with multi-agent orchestration capabili
 
 import asyncio
 import time
-from typing import Dict, List, Any, Optional, Tuple
-from datetime import datetime
+from typing import Dict, Any, Optional, Tuple
 
 # AutoGen imports
-from autogen_agentchat.teams import Swarm
-from autogen_agentchat.messages import HandoffMessage, TextMessage
 from autogen_agentchat.agents import AssistantAgent
 from autogen_agentchat.base import TaskResult
 
@@ -27,6 +24,9 @@ from src.autogen_mas_factory import AutogenMASFactory
 from src.conversation_adapter import ConversationAdapter
 from src.autogen_tools import AutogenToolFactory
 from src.autogen_model_client import AutogenModelClientFactory
+from src.scenario_variable_enricher import ScenarioVariableEnricher
+from src.conversation_orchestrator import ConversationOrchestrator
+from src.conversation_error_handler import ConversationErrorHandler
 
 # Braintrust tracing import
 from braintrust import traced
@@ -39,7 +39,14 @@ class AutogenConversationEngine:
     AutoGen's multi-agent coordination, tool calling, and memory management.
     """
 
-    def __init__(self, openai_wrapper: OpenAIWrapper, prompt_spec_name: str = "default_prompts"):
+    def __init__(
+        self,
+        openai_wrapper: OpenAIWrapper,
+        prompt_spec_name: str = "default_prompts",
+        variable_enricher: Optional[ScenarioVariableEnricher] = None,
+        orchestrator: Optional[ConversationOrchestrator] = None,
+        error_handler: Optional[ConversationErrorHandler] = None,
+    ):
         """
         Initialize AutogenConversationEngine with OpenAIWrapper and prompt specification.
 
@@ -51,6 +58,9 @@ class AutogenConversationEngine:
         self.webhook_manager = WebhookManager()
         self.logger = get_logger()
         self.prompt_spec_name = prompt_spec_name
+        self.variable_enricher = variable_enricher or ScenarioVariableEnricher(self.webhook_manager)
+        self.orchestrator = orchestrator or ConversationOrchestrator()
+        self.error_handler = error_handler or ConversationErrorHandler()
 
         # Load prompt specification
         self.prompt_manager = PromptSpecificationManager()
@@ -69,88 +79,8 @@ class AutogenConversationEngine:
     async def _enrich_variables_with_client_data(
         self, variables: Dict[str, Any], session_id: str
     ) -> Tuple[Dict[str, Any], Optional[str]]:
-        """
-        Enrich variables with client data from webhook if client_id is provided.
-        Falls back to existing values if client_id is not present.
-        Also applies default values for template formatting.
-        Reuses existing logic from ConversationEngine for compatibility.
-
-        Args:
-            variables: Dictionary of scenario variables
-            session_id: Session ID to add to variables
-
-        Returns:
-            Tuple of (enriched_variables, session_id_from_webhook)
-        """
-        variables = variables.copy()
-        webhook_session_id = None
-
-        # Check if client_id is provided
-        client_id = variables.get("client_id")
-        if client_id:
-            self.logger.log_info(f"Found client_id in scenario: {client_id}")
-
-            # Fetch client data from webhook (both variables and session_id)
-            client_data = await self.webhook_manager.get_client_data(client_id)
-            client_variables = client_data["variables"]
-            webhook_session_id = client_data["session_id"]
-
-            # Override the hardcoded variables with webhook data
-            variables.update(client_variables)
-
-            # Also set the lowercase versions for template compatibility
-            variables["name"] = client_variables.get("NAME", "")
-            variables["locations"] = client_variables.get("LOCATIONS", "")
-            variables["delivery_days"] = client_variables.get("DELIVERY_DAYS", "")
-            variables["purchase_history"] = client_variables.get("PURCHASE_HISTORY", "")
-            variables["current_date"] = variables.get("CURRENT_DATE", "")
-            if variables["current_date"] == "":
-                variables["current_date"] = client_variables.get("CURRENT_DATE", "")
-
-            self.logger.log_info(
-                f"Enriched variables with client data",
-                extra_data={
-                    "client_id": client_id,
-                    "has_dynamic_data": bool(client_variables.get("LOCATIONS")),
-                    "has_webhook_session_id": bool(webhook_session_id),
-                },
-            )
-        else:
-            # No client_id provided, use existing variables or set defaults
-            self.logger.log_info("No client_id provided, using existing variables")
-            # Ensure lowercase versions exist for template compatibility
-            if "LOCATIONS" in variables and "locations" not in variables:
-                variables["locations"] = variables["LOCATIONS"]
-            if "DELIVERY_DAYS" in variables and "delivery_days" not in variables:
-                variables["delivery_days"] = variables["DELIVERY_DAYS"]
-            if "PURCHASE_HISTORY" in variables and "purchase_history" not in variables:
-                variables["purchase_history"] = variables["PURCHASE_HISTORY"]
-            if "NAME" in variables and "name" not in variables:
-                variables["name"] = variables["NAME"]
-
-        # Add session_id to variables
-        variables["session_id"] = session_id
-
-        # Set default values for missing variables for template formatting
-        defaults = {
-            "CURRENT_DATE": "2024-01-15",
-            "current_date": "2024-01-15",
-            "DELIVERY_DAY": "завтра",
-            "delivery_days": "понедельник, среда, пятница",
-            "PURCHASE_HISTORY": "История покупок отсутствует",
-            "purchase_history": "История покупок отсутствует",
-            "name": variables.get("CLIENT_NAME", "Клиент"),
-            "locations": variables.get("LOCATION", "Адрес не указан"),
-            "CLIENT_NAME": variables.get("CLIENT_NAME", "Клиент"),
-            "LOCATION": variables.get("LOCATION", "Адрес не указан"),
-        }
-
-        # Add defaults for missing variables
-        for key, default_value in defaults.items():
-            if key not in variables:
-                variables[key] = default_value
-
-        return variables, webhook_session_id
+        """Delegate enrichment to :class:`ScenarioVariableEnricher`."""
+        return await self.variable_enricher.enrich_scenario_variables(variables, session_id)
 
     @traced(name="autogen_run_conversation")
     async def run_conversation(
@@ -288,290 +218,58 @@ class AutogenConversationEngine:
         )
 
         start_time = time.time()
-        all_messages = []  # Track all conversation messages
-        turn_count = 0
-
         try:
-            # Create AutoGen model client from OpenAIWrapper
             model_client = AutogenModelClientFactory.create_from_openai_wrapper(self.openai)
-
-            # Create user simulation agent using formatted spec
             user_agent = self._create_user_agent(model_client, formatted_spec)
-
-            # Create session-isolated tool factory
             tool_factory = AutogenToolFactory(session_id)
 
-            # Collect all unique tool names from all agents in formatted spec
             all_tool_names = set()
             for agent_spec in formatted_spec.agents.values():
                 all_tool_names.update(agent_spec.tools)
-
-            # Create tools for all agents (session-isolated)
             tools = tool_factory.get_tools_for_agent(list(all_tool_names))
 
-            # Create AutoGen Swarm team using formatted spec (without user as participant)
             mas_factory = AutogenMASFactory(session_id)
             swarm = mas_factory.create_swarm_team(
                 system_prompt_spec=formatted_spec, tools=tools, model_client=model_client
             )
 
-            # Prepare initial task based on system prompt spec
-            initial_task = "Добрый день!"  # Default greeting
+            initial_task = variables.get("client_greeting") or variables.get("GREETING", "Добрый день!")
 
-            # If there's a specific client prompt or greeting in variables, use that
-            if "client_greeting" in variables:
-                initial_task = variables["client_greeting"]
-            elif "GREETING" in variables:
-                initial_task = variables["GREETING"]
-
-            self.logger.log_info(
-                f"Starting AutoGen conversation loop",
-                extra_data={
-                    "session_id": session_id,
-                    "initial_task": initial_task,
-                    "agents_count": len(self.prompt_specification.agents),
-                    "tools_count": len(tools),
-                    "max_turns": max_turns,
-                },
+            messages = await self.orchestrator.run_conversation_loop(
+                swarm,
+                user_agent,
+                initial_task,
+                max_turns,
+                timeout_sec,
             )
 
-            # Conversation loop with timeout for entire conversation
-            try:
-                # Start timeout for entire conversation
-                conversation_start = time.time()
-                current_user_message = initial_task
-                last_active_agent = "agent"  # Default first agent
-
-                while turn_count < max_turns:
-                    # Check timeout for entire conversation
-                    if time.time() - conversation_start > timeout_sec:
-                        raise asyncio.TimeoutError(f"Conversation timeout after {timeout_sec} seconds")
-
-                    turn_count += 1
-
-                    self.logger.log_info(
-                        f"Turn {turn_count}: User -> {last_active_agent}",
-                        extra_data={
-                            "session_id": session_id,
-                            "user_message": current_user_message[:100],
-                            "target_agent": last_active_agent,
-                        },
-                    )
-
-                    # Run swarm with current user message
-                    task_result = await swarm.run(
-                        task=HandoffMessage(source="client", target=last_active_agent, content=current_user_message)
-                    )
-
-                    # Add all swarm messages to conversation history
-                    all_messages.extend(task_result.messages)
-
-                    # Get last message from MAS (should be TextMessage)
-                    last_message = task_result.messages[-1]
-                    if not isinstance(last_message, TextMessage):
-                        self.logger.log_error(
-                            f"MAS terminated with non-text message - cannot pass to user simulation. "
-                            f"Expected TextMessage, got {type(last_message).__name__}",
-                            extra_data={
-                                "session_id": session_id,
-                                "turn_count": turn_count,
-                                "message_type": type(last_message).__name__,
-                                "stop_reason": task_result.stop_reason,
-                                "total_mas_messages": len(task_result.messages),
-                                "scenario": scenario_name,
-                            },
-                        )
-                        # Stop conversation gracefully - create error result
-                        end_time = time.time()
-                        duration = end_time - start_time
-
-                        return {
-                            "session_id": session_id,
-                            "scenario": scenario_name,
-                            "status": "failed",
-                            "error": f"MAS terminated with non-text message ({type(last_message).__name__})",
-                            "error_type": "NonTextMessageError",
-                            "total_turns": turn_count,
-                            "duration_seconds": duration,
-                            "tools_used": True,
-                            "conversation_history": ConversationAdapter.extract_conversation_history(
-                                all_messages, self.prompt_specification
-                            ),
-                            "start_time": datetime.fromtimestamp(start_time).isoformat(),
-                            "end_time": datetime.fromtimestamp(end_time).isoformat(),
-                            "mas_stop_reason": task_result.stop_reason,
-                            "mas_message_count": len(task_result.messages),
-                        }
-
-                    # Update last active agent for next iteration
-                    last_active_agent = last_message.source
-
-                    self.logger.log_info(
-                        f"Turn {turn_count}: {last_active_agent} -> User",
-                        extra_data={
-                            "session_id": session_id,
-                            "agent_response": last_message.content[:100],
-                            "stop_reason": task_result.stop_reason,
-                        },
-                    )
-
-                    # Check if conversation naturally ended (only on actual termination conditions)
-                    # TODO: this is a hack to check if the conversation ended naturally, think how to refactor this to normal behavior.
-                    if task_result.stop_reason and any(
-                        term in task_result.stop_reason.lower()
-                        for term in ["terminate", "end", "finished", "completed"]
-                    ):
-                        self.logger.log_info(f"Conversation ended naturally: {task_result.stop_reason}")
-                        break
-
-                    # If we've reached max turns, break
-                    if turn_count >= max_turns:
-                        self.logger.log_info(f"Reached max_turns ({max_turns})")
-                        break
-
-                    # Get user response via user simulation agent
-                    user_response = await user_agent.on_messages([last_message], None)
-                    current_user_message = user_response.chat_message.content
-
-                    # Add user response to conversation history as a client message
-                    user_message = TextMessage(content=current_user_message, source="client")
-                    all_messages.append(user_message)
-
-                    self.logger.log_info(
-                        f"User simulation agent generated response",
-                        extra_data={"session_id": session_id, "user_response": current_user_message[:100]},
-                    )
-
-                end_time = time.time()
-                duration = end_time - start_time
-
-                self.logger.log_info(
-                    f"AutoGen conversation loop completed",
-                    extra_data={
-                        "session_id": session_id,
-                        "duration": duration,
-                        "total_turns": turn_count,
-                        "messages_count": len(all_messages),
-                    },
-                )
-
-                # Create a synthetic TaskResult for ConversationAdapter
-                synthetic_result = TaskResult(messages=all_messages, stop_reason=f"completed_{turn_count}_turns")
-
-                # Convert to contract format using ConversationAdapter
-                result = ConversationAdapter.autogen_to_contract_format(
-                    task_result=synthetic_result,
-                    session_id=session_id,
-                    scenario_name=scenario_name,
-                    duration=duration,
-                    start_time=start_time,
-                    prompt_spec=self.prompt_specification,
-                )
-
-                # Log conversation completion
-                self.logger.log_conversation_complete(
-                    session_id=session_id,
-                    total_turns=result.get("total_turns", 0),
-                    status=result.get("status", "completed"),
-                )
-
-                return result
-
-            except asyncio.TimeoutError:
-                end_time = time.time()
-                duration = end_time - start_time
-
-                self.logger.log_error(
-                    f"AutoGen conversation timeout after {timeout_sec} seconds",
-                    extra_data={
-                        "session_id": session_id,
-                        "timeout_sec": timeout_sec,
-                        "actual_duration": duration,
-                        "scenario_name": scenario_name,
-                        "completed_turns": turn_count,
-                    },
-                )
-
-                history = ConversationAdapter.extract_conversation_history(all_messages, self.prompt_specification)
-
-                # Return timeout result in contract format
-                return {
-                    "session_id": session_id,
-                    "scenario": scenario_name,
-                    "status": "timeout",
-                    "error": f"Conversation timeout after {timeout_sec} seconds",
-                    "error_type": "TimeoutError",
-                    "total_turns": turn_count,
-                    "duration_seconds": duration,
-                    "conversation_history": history,
-                    "start_time": datetime.fromtimestamp(start_time).isoformat(),
-                    "end_time": datetime.fromtimestamp(end_time).isoformat(),
-                    "tools_used": True,
-                }
+            duration = time.time() - start_time
+            synthetic_result = TaskResult(messages=messages, stop_reason=f"completed_{len(messages)}")
+            result = ConversationAdapter.autogen_to_contract_format(
+                task_result=synthetic_result,
+                session_id=session_id,
+                scenario_name=scenario_name,
+                duration=duration,
+                start_time=start_time,
+                prompt_spec=self.prompt_specification,
+            )
+            self.logger.log_conversation_complete(
+                session_id=session_id,
+                total_turns=result.get("total_turns", 0),
+                status=result.get("status", "completed"),
+            )
+            return result
 
         except Exception as e:
             end_time = time.time()
-            duration = end_time - start_time
-
-            # Enhanced error logging with more context
-            error_context = {
-                "session_id": session_id,
-                "scenario_name": scenario_name,
-                "duration_so_far": duration,
-                "max_turns": max_turns,
-                "timeout_sec": timeout_sec,
-                "completed_turns": turn_count,
-                "error_type": type(e).__name__,
-                "spec_name": self.prompt_spec_name,
-            }
-
-            # Check if this is a geographic restriction or persistent OpenAI API failure
-            error_message = str(e).lower()
-            is_api_blocked = (
-                "geographic restriction" in error_message
-                or "unsupported_country_region_territory" in error_message
-                or "blocked due to geographic" in error_message
+            kwargs = dict(
+                session_id=session_id,
+                scenario=scenario_name,
+                start_time=start_time,
+                end_time=end_time,
+                turn_count=0,
+                timeout_sec=timeout_sec,
+                error_context={"scenario": scenario_name},
             )
-
-            if is_api_blocked:
-                self.logger.log_error(
-                    f"OpenAI API blocked in AutoGen engine - attempting graceful degradation: {str(e)}",
-                    exception=e,
-                    extra_data=error_context,
-                )
-
-                # Return a graceful failure with some useful information
-                return {
-                    "session_id": session_id,
-                    "scenario": scenario_name,
-                    "status": "failed_api_blocked",
-                    "error": "OpenAI API blocked due to geographic restrictions",
-                    "error_type": "APIBlockedError",
-                    "total_turns": turn_count,
-                    "duration_seconds": duration,
-                    "tools_used": True,
-                    "conversation_history": [],
-                    "start_time": datetime.fromtimestamp(start_time).isoformat(),
-                    "end_time": datetime.fromtimestamp(end_time).isoformat(),
-                    "graceful_degradation": True,
-                    "partial_completion": turn_count > 0,
-                }
-            else:
-                self.logger.log_error(
-                    f"AutoGen conversation with tools failed: {str(e)}", exception=e, extra_data=error_context
-                )
-
-            return {
-                "session_id": session_id,
-                "scenario": scenario_name,
-                "status": "failed",
-                "error": str(e),
-                "error_type": type(e).__name__,
-                "total_turns": turn_count,
-                "duration_seconds": duration,
-                "tools_used": True,
-                "conversation_history": [],
-                "start_time": datetime.fromtimestamp(start_time).isoformat(),
-                "end_time": datetime.fromtimestamp(end_time).isoformat(),
-                "error_context": error_context,
-            }
+            self.logger.log_error("Conversation failed", exception=e, extra_data={"session_id": session_id})
+            return self.error_handler.handle_error_by_type(e, **kwargs)

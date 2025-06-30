@@ -75,6 +75,18 @@ Business logic for managing agent specifications and conversation configurations
 **File**: `src/conversation_adapter.py`
 **Business Logic Coverage**: Translates AutoGen messages and task results to the existing conversation result format for evaluator and batch processor consumption.
 
+### Scenario Variable Enricher
+**File**: `src/scenario_variable_enricher.py`
+**Business Logic Coverage**: Enriches scenario variables with webhook client data and applies default values.
+
+### Conversation Orchestrator
+**File**: `src/conversation_orchestrator.py`
+**Business Logic Coverage**: Manages conversation loop execution and user-agent interaction.
+
+### Conversation Error Handler
+**File**: `src/conversation_error_handler.py`
+**Business Logic Coverage**: Provides centralized formatting for API, timeout, and general errors.
+
 ## Integration with Infrastructure Layer
 
 ### Port Interfaces

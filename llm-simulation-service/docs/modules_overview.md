@@ -19,6 +19,9 @@ This document provides a comprehensive mapping of all source code modules to the
 | `src/evaluator.py` | Service | Conversation scoring and quality assessment logic | [Evaluator Contract](contracts/service_layer_contracts/evaluator_contract.md) |
 | `src/prompt_specification.py` | Service | Agent configuration and prompt management logic | [Prompt Specification Contract](contracts/specification_contracts/prompt_specification_contract.md) |
 | `src/tools_specification.py` | Service | Tool definition and handoff rule management | [Tools Specification Contract](contracts/specification_contracts/tools_specification_contract.md) |
+| `src/scenario_variable_enricher.py` | Service | Variable enrichment from webhook data | - |
+| `src/conversation_orchestrator.py` | Service | Conversation loop execution utilities | - |
+| `src/conversation_error_handler.py` | Service | Format structured conversation errors | - |
 | **Infrastructure Layer - External Adapters** |
 | `src/openai_wrapper.py` | Infrastructure | OpenAI API adapter for LLM interactions | [OpenAI Wrapper Contract](contracts/infra_util_contracts/openai_wrapper_contract.md) |
 | `src/autogen_model_client.py` | Infrastructure | Creates AutoGen-compatible clients | [AutogenModelClientFactory Contract](contracts/infra_util_contracts/autogen_model_client_contract.md) |
@@ -44,7 +47,7 @@ This document provides a comprehensive mapping of all source code modules to the
 - Route handlers (`batch_routes.py`, `prompt_spec_routes.py`, `user.py`)
 - Application entry point (`main.py`)
 
-### Service Layer (7 modules)
+### Service Layer (10 modules)
 **Purpose**: Core business logic and workflow orchestration  
 **Characteristics**:
 - Pure business logic with no external system access
