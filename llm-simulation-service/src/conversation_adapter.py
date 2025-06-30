@@ -64,25 +64,16 @@ class ConversationAdapter:
             end_time = current_time
 
             # Extract conversation history from AutoGen messages
-            conversation_history = ConversationAdapter.extract_conversation_history(
-                task_result.messages, prompt_spec
-            )
+            conversation_history = ConversationAdapter.extract_conversation_history(task_result.messages, prompt_spec)
 
             # Determine status based on stop reason and messages
-            status = ConversationAdapter._determine_conversation_status(
-                task_result.stop_reason, conversation_history
-            )
+            status = ConversationAdapter._determine_conversation_status(task_result.stop_reason, conversation_history)
 
             # Count total turns
-            total_turns = len(
-                [entry for entry in conversation_history if entry.get("turn")]
-            )
+            total_turns = len([entry for entry in conversation_history if entry.get("turn")])
 
             # Check if tools were used
-            tools_used = any(
-                entry.get("tool_calls") or entry.get("tool_results")
-                for entry in conversation_history
-            )
+            tools_used = any(entry.get("tool_calls") or entry.get("tool_results") for entry in conversation_history)
 
             result = {
                 "session_id": session_id,
@@ -155,9 +146,7 @@ class ConversationAdapter:
 
         if prompt_spec:
             try:
-                agents = getattr(
-                    prompt_spec, "agents", getattr(prompt_spec, "agents", {})
-                )
+                agents = getattr(prompt_spec, "agents", getattr(prompt_spec, "agents", {}))
                 for agent_id, agent_spec in agents.items():
                     if hasattr(agent_spec, "name"):
                         display_name_map[agent_id] = agent_spec.name
@@ -176,7 +165,7 @@ class ConversationAdapter:
                 # Skip system messages as they're not part of conversation flow
                 if hasattr(message, "source") and message.source == "system":
                     continue
-                
+
                 # Skip ToolCallSummaryMessage as it contains redundant information
                 if isinstance(message, ToolCallSummaryMessage):
                     continue
@@ -192,9 +181,7 @@ class ConversationAdapter:
                 speaker = ConversationAdapter._extract_speaker(message)
 
                 if is_tool_event:
-                    tool_calls, tool_results = ConversationAdapter._extract_tools_info(
-                        message
-                    )
+                    tool_calls, tool_results = ConversationAdapter._extract_tools_info(message)
                     if tool_calls:
                         if pending_calls and speaker != pending_speaker:
                             # flush previous pending calls if speaker changed
@@ -206,13 +193,9 @@ class ConversationAdapter:
                                     "content": "",
                                     "timestamp": datetime.now().isoformat(),
                                     "speaker_display": pending_display_name
-                                    or (pending_speaker or "agent")
-                                    .replace("agent_", "")
-                                    .capitalize(),
+                                    or (pending_speaker or "agent").replace("agent_", "").capitalize(),
                                     "tool_calls": pending_calls,
-                                    "tool_results": (
-                                        pending_results if pending_results else None
-                                    ),
+                                    "tool_results": (pending_results if pending_results else None),
                                 }
                             )
                             pending_calls = []
@@ -231,14 +214,10 @@ class ConversationAdapter:
                             elif speaker.startswith("agent_"):
                                 agent_type = speaker.replace("agent_", "")
                                 pending_display_name = (
-                                    "Agent"
-                                    if agent_type == "agent"
-                                    else f"{agent_type.capitalize()} Agent"
+                                    "Agent" if agent_type == "agent" else f"{agent_type.capitalize()} Agent"
                                 )
                             else:
-                                pending_display_name = (
-                                    speaker.capitalize() if speaker else "Unknown"
-                                )
+                                pending_display_name = speaker.capitalize() if speaker else "Unknown"
 
                     if tool_calls:
                         pending_calls.extend(tool_calls)
@@ -267,11 +246,7 @@ class ConversationAdapter:
                         display_name = "Client"
                     elif speaker.startswith("agent_"):
                         agent_type = speaker.replace("agent_", "")
-                        display_name = (
-                            "Agent"
-                            if agent_type == "agent"
-                            else f"{agent_type.capitalize()} Agent"
-                        )
+                        display_name = "Agent" if agent_type == "agent" else f"{agent_type.capitalize()} Agent"
                     else:
                         display_name = speaker.capitalize() if speaker else "Unknown"
                 history_entry["speaker_display"] = display_name
@@ -297,18 +272,14 @@ class ConversationAdapter:
                         "content": "",
                         "timestamp": datetime.now().isoformat(),
                         "speaker_display": pending_display_name
-                        or (pending_speaker or "agent")
-                        .replace("agent_", "")
-                        .capitalize(),
+                        or (pending_speaker or "agent").replace("agent_", "").capitalize(),
                         "tool_calls": pending_calls if pending_calls else None,
                         "tool_results": pending_results if pending_results else None,
                     }
                 )
 
         except Exception as e:
-            logger.log_error(
-                f"Failed to extract conversation history: {e}", exception=e
-            )
+            logger.log_error(f"Failed to extract conversation history: {e}", exception=e)
 
         return conversation_history
 
@@ -417,13 +388,10 @@ class ConversationAdapter:
                         # If not JSON, store as string
                         tool_results.append(result_content)
 
-
         return tool_calls, tool_results
 
     @staticmethod
-    def _determine_conversation_status(
-        stop_reason: str, conversation_history: List[Dict]
-    ) -> str:
+    def _determine_conversation_status(stop_reason: str, conversation_history: List[Dict]) -> str:
         """
         Determine conversation status based on AutoGen stop reason and conversation content
 
@@ -450,10 +418,7 @@ class ConversationAdapter:
             content = last_entry.get("content", "").lower()
 
             # Check for call end indicators
-            if any(
-                phrase in content
-                for phrase in ["end_call", "завершил звонок", "call ended"]
-            ):
+            if any(phrase in content for phrase in ["end_call", "завершил звонок", "call ended"]):
                 return "completed"
 
             # Check for tool calls that indicate completion

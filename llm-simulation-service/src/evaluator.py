@@ -13,35 +13,25 @@ from src.prompt_specification import PromptSpecificationManager
 class ConversationEvaluator:
     """Evaluates conversations and provides scores with comments"""
 
-    def __init__(
-        self, openai_wrapper: OpenAIWrapper, prompt_spec_name: str = "default_prompts"
-    ):
+    def __init__(self, openai_wrapper: OpenAIWrapper, prompt_spec_name: str = "default_prompts"):
         self.openai = openai_wrapper
         self.logger = get_logger()
 
         # Load evaluator prompt from specification
         self.prompt_manager = PromptSpecificationManager()
-        self.prompt_specification = self.prompt_manager.load_specification(
-            prompt_spec_name
-        )
+        self.prompt_specification = self.prompt_manager.load_specification(prompt_spec_name)
 
         evaluator_spec = self.prompt_specification.get_agent_prompt("evaluator")
         if evaluator_spec:
             self.evaluator_prompt = evaluator_spec.prompt
         else:
-            self.logger.log_error(
-                "No evaluator specification found, using fallback prompt"
-            )
+            self.logger.log_error("No evaluator specification found, using fallback prompt")
             self.evaluator_prompt = """You are an expert evaluator of customer service conversations. 
             Evaluate the conversation and respond with JSON: {"score": [1,2,3], "comment": "explanation"}"""
 
-        self.logger.log_info(
-            f"ConversationEvaluator initialized with prompt specification: {prompt_spec_name}"
-        )
+        self.logger.log_info(f"ConversationEvaluator initialized with prompt specification: {prompt_spec_name}")
 
-    def _format_conversation_for_evaluation(
-        self, conversation_history: List[Dict[str, Any]]
-    ) -> str:
+    def _format_conversation_for_evaluation(self, conversation_history: List[Dict[str, Any]]) -> str:
         """Format conversation history for evaluation"""
         formatted_conversation = "=== РАЗГОВОР ДЛЯ ОЦЕНКИ ===\n\n"
 
@@ -62,9 +52,7 @@ class ConversationEvaluator:
         formatted_conversation += "=== КОНЕЦ РАЗГОВОРА ==="
         return formatted_conversation
 
-    async def evaluate_conversation(
-        self, conversation_data: Dict[str, Any]
-    ) -> Dict[str, Any]:
+    async def evaluate_conversation(self, conversation_data: Dict[str, Any]) -> Dict[str, Any]:
         """Evaluate a conversation and return score with comment"""
 
         session_id = conversation_data.get("session_id", "unknown")
@@ -82,9 +70,7 @@ class ConversationEvaluator:
 
         try:
             # Format conversation for evaluation
-            formatted_conversation = self._format_conversation_for_evaluation(
-                conversation_history
-            )
+            formatted_conversation = self._format_conversation_for_evaluation(conversation_history)
 
             # Prepare messages for evaluator
             messages = [
@@ -100,9 +86,7 @@ class ConversationEvaluator:
             )
 
             # Parse and validate evaluation
-            score, comment = self._parse_evaluation_response(
-                evaluation_response, session_id
-            )
+            score, comment = self._parse_evaluation_response(evaluation_response, session_id)
 
             evaluation_result = {
                 "session_id": session_id,
@@ -140,9 +124,7 @@ class ConversationEvaluator:
                 "error": str(e),
             }
 
-    def _parse_evaluation_response(
-        self, response: Dict[str, Any], session_id: str
-    ) -> Tuple[int, str]:
+    def _parse_evaluation_response(self, response: Dict[str, Any], session_id: str) -> Tuple[int, str]:
         """Parse and validate evaluation response"""
         try:
             score = response.get("score", 1)
@@ -170,14 +152,10 @@ class ConversationEvaluator:
             )
             return 1, f"Ошибка парсинга оценки: {str(e)}"
 
-    async def batch_evaluate_conversations(
-        self, conversations: List[Dict[str, Any]]
-    ) -> List[Dict[str, Any]]:
+    async def batch_evaluate_conversations(self, conversations: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """Evaluate multiple conversations"""
 
-        self.logger.log_info(
-            f"Starting batch evaluation of {len(conversations)} conversations"
-        )
+        self.logger.log_info(f"Starting batch evaluation of {len(conversations)} conversations")
 
         evaluations = []
 
@@ -187,7 +165,7 @@ class ConversationEvaluator:
                 evaluations.append(evaluation)
 
                 self.logger.log_info(
-                    f"Completed evaluation {i+1}/{len(conversations)}",
+                    f"Completed evaluation {i + 1}/{len(conversations)}",
                     extra_data={
                         "session_id": evaluation.get("session_id"),
                         "score": evaluation.get("score"),
@@ -195,9 +173,7 @@ class ConversationEvaluator:
                 )
 
             except Exception as e:
-                self.logger.log_error(
-                    f"Failed to evaluate conversation {i+1}", exception=e
-                )
+                self.logger.log_error(f"Failed to evaluate conversation {i + 1}", exception=e)
 
                 # Add failed evaluation
                 evaluations.append(
@@ -211,14 +187,10 @@ class ConversationEvaluator:
                     }
                 )
 
-        self.logger.log_info(
-            f"Completed batch evaluation: {len(evaluations)} evaluations"
-        )
+        self.logger.log_info(f"Completed batch evaluation: {len(evaluations)} evaluations")
         return evaluations
 
-    def get_evaluation_summary(
-        self, evaluations: List[Dict[str, Any]]
-    ) -> Dict[str, Any]:
+    def get_evaluation_summary(self, evaluations: List[Dict[str, Any]]) -> Dict[str, Any]:
         """Generate summary statistics for evaluations"""
 
         if not evaluations:
@@ -230,9 +202,7 @@ class ConversationEvaluator:
             }
 
         scores = [eval_data.get("score", 1) for eval_data in evaluations]
-        successful_evaluations = [
-            e for e in evaluations if e.get("evaluation_status") == "success"
-        ]
+        successful_evaluations = [e for e in evaluations if e.get("evaluation_status") == "success"]
 
         score_distribution = {1: 0, 2: 0, 3: 0}
         for score in scores:
@@ -244,7 +214,5 @@ class ConversationEvaluator:
             "successful_evaluations": len(successful_evaluations),
             "average_score": sum(scores) / len(scores) if scores else 0,
             "score_distribution": score_distribution,
-            "success_rate": (
-                len(successful_evaluations) / len(evaluations) if evaluations else 0
-            ),
+            "success_rate": (len(successful_evaluations) / len(evaluations) if evaluations else 0),
         }

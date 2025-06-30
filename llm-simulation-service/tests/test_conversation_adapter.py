@@ -228,9 +228,7 @@ class TestConversationAdapter:
 
     def test_merge_tool_events_with_final_message(self):
         """Tool calls and executions should merge into the next agent message. ToolCallSummaryMessage is skipped."""
-        tool_call = create_function_call(
-            "call_1", "set_current_location", '{"location_id": 347881}'
-        )
+        tool_call = create_function_call("call_1", "set_current_location", '{"location_id": 347881}')
         messages = [
             TextMessage(source="client", content="Здравствуйте"),
             ToolCallRequestEvent(source="agent", content=[tool_call]),

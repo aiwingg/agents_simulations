@@ -7,9 +7,7 @@ from src.openai_wrapper import OpenAIWrapper
 @patch("src.evaluator.PromptSpecificationManager")
 def test_format_conversation_roles(mock_manager):
     # Avoid loading real prompt specifications
-    mock_manager.return_value.load_specification.return_value = Mock(
-        get_agent_prompt=Mock(return_value=None)
-    )
+    mock_manager.return_value.load_specification.return_value = Mock(get_agent_prompt=Mock(return_value=None))
     evaluator = ConversationEvaluator(Mock(spec=OpenAIWrapper), "test_spec")
 
     history = [

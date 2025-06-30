@@ -32,7 +32,7 @@ Add or update tests for every new behaviour. CI must be green before requesting 
 
 ## 3. Code Quality
 
-* **Python**: Black (line length 100), Ruff, type hints, docstrings.
+* **Python**: Ruff (line length 120), type hints, docstrings using Google convention for Python.
 * **JavaScript/TypeScript**: ESLint, Prettier, strict TS.
 * Functions ≤ 50 LoC; favour pure, testable components.
 * Use descriptive names; avoid magic numbers.
