@@ -2,6 +2,8 @@ import pytest
 from unittest.mock import AsyncMock, patch
 
 from src.batch_processor import BatchProcessor
+from src.scenario_processor import ScenarioProcessor
+from src.batch_progress_tracker import BatchProgressTracker
 
 
 class DummyStorage:
@@ -43,7 +45,10 @@ async def test_timeout_conversation_evaluated():
         mock_eval = MockEvaluator.return_value
         mock_eval.evaluate_conversation = AsyncMock(return_value=evaluation_result)
 
-        result = await processor._process_single_scenario(scenario, 0, batch_id)
+        job = processor.active_jobs[batch_id]
+        tracker = BatchProgressTracker(job)
+        scenario_proc = ScenarioProcessor(processor.openai_wrapper, tracker)
+        result = await scenario_proc.process_scenario(scenario, 0, batch_id, "test_prompts", True)
         mock_eval.evaluate_conversation.assert_awaited_once_with(conversation_result)
 
     assert result["status"] == "timeout"
