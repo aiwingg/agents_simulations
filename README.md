@@ -47,6 +47,7 @@ graph LR
 - **llm-simulation-service** – backend Flask application with business logic and integrations
 - **llm-simulation-frontend** – React interface for launching and monitoring simulations
 - **server.py** – experimental FastAPI server used for research
+- **Autogen-based conversation engine** – modular engine built from services for variable enrichment, turn management, loop orchestration and error handling
 
 ## Configuration System
 Environment variables are documented in [config_system.md](llm-simulation-service/docs/configuration/config_system.md). Startup creates the necessary result and log directories automatically.

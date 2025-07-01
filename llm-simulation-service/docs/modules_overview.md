@@ -21,7 +21,10 @@ This document provides a comprehensive mapping of all source code modules to the
 | `src/dtos/parsed_message.py` | Service | DTO representing parsed AutoGen message | [ParsedMessage DTO](contracts/dto/parsed_message_dto.md) |
 | `src/conversation_context.py` | Service | Dataclass representing conversation state | N/A |
 | `src/turn_result.py` | Service | Dataclass representing single turn outcome | N/A |
-| `src/scenario_variable_enricher.py` | Service | Scenario variable enrichment helpers | N/A |
+| `src/scenario_variable_enricher.py` | Service | Scenario variable enrichment helpers | [ScenarioVariableEnricher Contract](contracts/service_layer_contracts/scenario_variable_enricher_contract.md) |
+| `src/conversation_turn_manager.py` | Service | Execute conversation turns | [ConversationTurnManager Contract](contracts/service_layer_contracts/conversation_turn_manager_contract.md) |
+| `src/conversation_error_handler.py` | Service | Centralized error handling | [ConversationErrorHandler Contract](contracts/service_layer_contracts/conversation_error_handler_contract.md) |
+| `src/conversation_loop_orchestrator.py` | Service | Manage conversation loops | [ConversationLoopOrchestrator Contract](contracts/service_layer_contracts/conversation_loop_orchestrator_contract.md) |
 | `src/batch_processor.py` | Service | Parallel batch processing and workflow coordination | [Batch Processor Contract](contracts/service_layer_contracts/batch_processor_contract.md) |
 | `src/evaluator.py` | Service | Conversation scoring and quality assessment logic | [Evaluator Contract](contracts/service_layer_contracts/evaluator_contract.md) |
 | `src/prompt_specification.py` | Service | Agent configuration and prompt management logic | [Prompt Specification Contract](contracts/specification_contracts/prompt_specification_contract.md) |
@@ -51,7 +54,7 @@ This document provides a comprehensive mapping of all source code modules to the
 - Route handlers (`batch_routes.py`, `prompt_spec_routes.py`, `user.py`)
 - Application entry point (`main.py`)
 
-### Service Layer (10 modules)
+### Service Layer (14 modules)
 **Purpose**: Core business logic and workflow orchestration  
 **Characteristics**:
 - Pure business logic with no external system access
