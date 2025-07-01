@@ -15,6 +15,10 @@ This document provides a comprehensive mapping of all source code modules to the
 | **Service Layer - Business Logic** |
 | `src/autogen_conversation_engine.py` | Service | Conversation engine based on AutoGen Swarm pattern | [Conversation Engine Contract](contracts/service_layer_contracts/conversation_engine_contract.md) |
 | `src/conversation_adapter.py` | Service | Format translation between AutoGen and existing results | [ConversationAdapter Contract](contracts/service_layer_contracts/conversation_adapter_contract.md) |
+| `src/autogen_message_parser.py` | Service | Parse AutoGen messages and extract tool info | [AutogenMessageParser Contract](contracts/service_layer_contracts/autogen_message_parser_contract.md) |
+| `src/speaker_display_name_resolver.py` | Service | Resolve speaker display names from prompt specs | [SpeakerDisplayNameResolver Contract](contracts/service_layer_contracts/speaker_display_name_resolver_contract.md) |
+| `src/tool_flush_state_machine.py` | Service | Match tool calls/results and flush to messages | [ToolFlushStateMachine Contract](contracts/service_layer_contracts/tool_flush_state_machine_contract.md) |
+| `src/dtos/parsed_message.py` | Service | DTO representing parsed AutoGen message | [ParsedMessage DTO](contracts/dto/parsed_message_dto.md) |
 | `src/batch_processor.py` | Service | Parallel batch processing and workflow coordination | [Batch Processor Contract](contracts/service_layer_contracts/batch_processor_contract.md) |
 | `src/evaluator.py` | Service | Conversation scoring and quality assessment logic | [Evaluator Contract](contracts/service_layer_contracts/evaluator_contract.md) |
 | `src/prompt_specification.py` | Service | Agent configuration and prompt management logic | [Prompt Specification Contract](contracts/specification_contracts/prompt_specification_contract.md) |
@@ -44,7 +48,7 @@ This document provides a comprehensive mapping of all source code modules to the
 - Route handlers (`batch_routes.py`, `prompt_spec_routes.py`, `user.py`)
 - Application entry point (`main.py`)
 
-### Service Layer (7 modules)
+### Service Layer (10 modules)
 **Purpose**: Core business logic and workflow orchestration  
 **Characteristics**:
 - Pure business logic with no external system access
@@ -54,6 +58,9 @@ This document provides a comprehensive mapping of all source code modules to the
 **Key Modules**:
 - Conversation engine (`autogen_conversation_engine.py`)
 - Conversation adapter (`conversation_adapter.py`)
+- Message parsing (`autogen_message_parser.py`)
+- Display name resolution (`speaker_display_name_resolver.py`)
+- Tool flush state machine (`tool_flush_state_machine.py`)
 - Batch processing coordination (`batch_processor.py`)
 - Quality assessment (`evaluator.py`)
 - Configuration management (`prompt_specification.py`, `tools_specification.py`)

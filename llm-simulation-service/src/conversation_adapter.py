@@ -5,20 +5,16 @@ Converts AutoGen TaskResult and message formats to existing ConversationEngine c
 
 import json
 import time
-from typing import Dict, List, Any, Optional
 from datetime import datetime
+from typing import Any, Dict, List, Optional
 
 # AutoGen imports
-from autogen_agentchat.messages import (
-    BaseChatMessage,
-    BaseAgentEvent,
-    TextMessage,
-    ToolCallRequestEvent,
-    ToolCallExecutionEvent,
-    ToolCallSummaryMessage,
-    HandoffMessage,
-)
+from autogen_agentchat.messages import BaseAgentEvent, BaseChatMessage
 from autogen_agentchat.base import TaskResult
+
+from src.autogen_message_parser import AutogenMessageParser
+from src.speaker_display_name_resolver import SpeakerDisplayNameResolver
+from src.tool_flush_state_machine import ToolFlushStateMachine
 
 from src.logging_utils import get_logger
 
@@ -128,267 +124,40 @@ class ConversationAdapter:
         messages: List[BaseChatMessage | BaseAgentEvent],
         prompt_spec: Optional[Any] = None,
     ) -> List[Dict]:
-        """
-        Converts AutoGen messages to conversation_history format with tool_calls/tool_results
-
-        Args:
-            messages: List of AutoGen BaseChatMessage instances
-
-        Returns:
-            List of conversation history entries in existing contract format.
-            Each entry is a `ConversationHistoryItem` dictionary described in
-            `docs/contracts/dto/conversation_history_item.md`.
-        """
+        """Convert AutoGen messages to the ConversationHistoryItem structure."""
         logger = get_logger()
-        conversation_history = []
+        parser = AutogenMessageParser()
+        resolver = SpeakerDisplayNameResolver(prompt_spec)
+        state_machine = ToolFlushStateMachine()
+        history: List[Dict[str, Any]] = []
         turn_number = 0
-        display_name_map = {}
 
-        if prompt_spec:
-            try:
-                agents = getattr(prompt_spec, "agents", getattr(prompt_spec, "agents", {}))
-                for agent_id, agent_spec in agents.items():
-                    if hasattr(agent_spec, "name"):
-                        display_name_map[agent_id] = agent_spec.name
-                    elif isinstance(agent_spec, dict):
-                        display_name_map[agent_id] = agent_spec.get("name", agent_id)
-            except Exception as e:
-                logger.log_error(f"Failed to build display name map: {e}", exception=e)
+        for message in messages:
+            parsed = parser.parse_message(message)
+            if parsed.should_skip:
+                continue
+            parsed.speaker_display = resolver.resolve_display_name(
+                parsed.speaker, getattr(message, "source", None)
+            )
+            if parsed.is_tool_event:
+                flush = state_machine.process_tool_event(parsed)
+                if flush:
+                    turn_number += 1
+                    flush["turn"] = turn_number
+                    history.append(flush)
+                continue
 
-        try:
-            pending_calls: List[Dict] = []
-            pending_results: List[Any] = []
-            pending_speaker: Optional[str] = None
-            pending_display_name: Optional[str] = None
+            entry = state_machine.process_text_message(parsed)
+            turn_number += 1
+            entry["turn"] = turn_number
+            history.append(entry)
 
-            for i, message in enumerate(messages):
-                # Skip system messages as they're not part of conversation flow
-                if hasattr(message, "source") and message.source == "system":
-                    continue
+        orphaned = state_machine.handle_orphaned_tools(turn_number + 1)
+        if orphaned:
+            history.append(orphaned)
 
-                # Skip ToolCallSummaryMessage as it contains redundant information
-                if isinstance(message, ToolCallSummaryMessage):
-                    continue
+        return history
 
-                is_tool_event = isinstance(
-                    message,
-                    (
-                        ToolCallRequestEvent,
-                        ToolCallExecutionEvent,
-                    ),
-                )
-
-                speaker = ConversationAdapter._extract_speaker(message)
-
-                if is_tool_event:
-                    tool_calls, tool_results = ConversationAdapter._extract_tools_info(message)
-                    if tool_calls:
-                        if pending_calls and speaker != pending_speaker:
-                            # flush previous pending calls if speaker changed
-                            turn_number += 1
-                            conversation_history.append(
-                                {
-                                    "turn": turn_number,
-                                    "speaker": pending_speaker or "agent",
-                                    "content": "",
-                                    "timestamp": datetime.now().isoformat(),
-                                    "speaker_display": pending_display_name
-                                    or (pending_speaker or "agent").replace("agent_", "").capitalize(),
-                                    "tool_calls": pending_calls,
-                                    "tool_results": (pending_results if pending_results else None),
-                                }
-                            )
-                            pending_calls = []
-                            pending_results = []
-                            pending_speaker = None
-                            pending_display_name = None
-
-                    if isinstance(message, ToolCallRequestEvent):
-                        pending_speaker = speaker
-                        agent_id = getattr(message, "source", None)
-                        if agent_id and agent_id in display_name_map:
-                            pending_display_name = display_name_map[agent_id]
-                        else:
-                            if speaker == "client":
-                                pending_display_name = "Client"
-                            elif speaker.startswith("agent_"):
-                                agent_type = speaker.replace("agent_", "")
-                                pending_display_name = (
-                                    "Agent" if agent_type == "agent" else f"{agent_type.capitalize()} Agent"
-                                )
-                            else:
-                                pending_display_name = speaker.capitalize() if speaker else "Unknown"
-
-                    if tool_calls:
-                        pending_calls.extend(tool_calls)
-                    if tool_results:
-                        pending_results.extend(tool_results)
-
-                    continue
-
-                # Non tool event -> flush pending info onto this message
-                turn_number += 1
-                content = ConversationAdapter._extract_content(message)
-                history_entry = {
-                    "turn": turn_number,
-                    "speaker": speaker,
-                    "content": content,
-                    "timestamp": datetime.now().isoformat(),
-                }
-
-                # Derive display name for speaker
-                agent_id = getattr(message, "source", None)
-                display_name = None
-                if agent_id and agent_id in display_name_map:
-                    display_name = display_name_map[agent_id]
-                if not display_name:
-                    if speaker == "client":
-                        display_name = "Client"
-                    elif speaker.startswith("agent_"):
-                        agent_type = speaker.replace("agent_", "")
-                        display_name = "Agent" if agent_type == "agent" else f"{agent_type.capitalize()} Agent"
-                    else:
-                        display_name = speaker.capitalize() if speaker else "Unknown"
-                history_entry["speaker_display"] = display_name
-
-                if pending_calls:
-                    history_entry["tool_calls"] = pending_calls
-                if pending_results:
-                    history_entry["tool_results"] = pending_results
-
-                conversation_history.append(history_entry)
-
-                pending_calls = []
-                pending_results = []
-                pending_speaker = None
-                pending_display_name = None
-
-            if pending_calls or pending_results:
-                turn_number += 1
-                conversation_history.append(
-                    {
-                        "turn": turn_number,
-                        "speaker": pending_speaker or "agent",
-                        "content": "",
-                        "timestamp": datetime.now().isoformat(),
-                        "speaker_display": pending_display_name
-                        or (pending_speaker or "agent").replace("agent_", "").capitalize(),
-                        "tool_calls": pending_calls if pending_calls else None,
-                        "tool_results": pending_results if pending_results else None,
-                    }
-                )
-
-        except Exception as e:
-            logger.log_error(f"Failed to extract conversation history: {e}", exception=e)
-
-        return conversation_history
-
-    @staticmethod
-    def _extract_speaker(message: BaseChatMessage | BaseAgentEvent) -> str:
-        """
-        Extract speaker identifier from AutoGen message
-
-        Args:
-            message: AutoGen BaseChatMessage
-
-        Returns:
-            Speaker string in contract format ("agent_{name}" or "client")
-        """
-        if hasattr(message, "source"):
-            source = message.source
-
-            # Handle client messages
-            if source == "client" or source == "user":
-                return "client"
-
-            # Handle tool execution results - use generic 'agent'
-            if source == "tool" or source == "tools":
-                return "agent"
-
-            # Handle agent messages - preserve agent name
-            if source and source != "system":
-                return f"agent_{source}"
-
-        # Default fallback
-        return "agent"
-
-    @staticmethod
-    def _extract_content(message: BaseChatMessage | BaseAgentEvent) -> str:
-        """
-        Extract text content from AutoGen message
-
-        Args:
-            message: AutoGen BaseChatMessage
-
-        Returns:
-            String content of the message
-        """
-        if isinstance(message, TextMessage):
-            return message.content or ""
-        elif isinstance(message, ToolCallRequestEvent):
-            # For tool call request events, return summary
-            return f"[TOOL CALL REQUEST: {len(message.content)} tools]"
-        elif isinstance(message, ToolCallExecutionEvent):
-            # For tool execution events, return summary
-            return "[TOOL EXECUTION]"
-
-        elif isinstance(message, HandoffMessage):
-            # For handoff messages, return handoff info
-            target = getattr(message, "target", "unknown")
-            return f"[HANDOFF TO: {target}]"
-        else:
-            # Generic content extraction
-            return getattr(message, "content", "") or ""
-
-    @staticmethod
-    def _extract_tools_info(
-        message: BaseChatMessage | BaseAgentEvent,
-    ) -> tuple[Optional[List[Dict]], Optional[List[Any]]]:
-        """
-        Extract tool calls and results from AutoGen message
-
-        Args:
-            message: AutoGen BaseChatMessage
-
-        Returns:
-            Tuple of (tool_calls, tool_results) or (None, None) if no tools
-        """
-        tool_calls = None
-        tool_results = None
-
-        if isinstance(message, ToolCallRequestEvent):
-            # Extract tool calls from ToolCallRequestEvent
-            if hasattr(message, "content") and message.content:
-                tool_calls = []
-                for tool_call in message.content:
-                    tool_call_dict = {
-                        "id": getattr(tool_call, "id", ""),
-                        "type": "function",
-                        "function": {
-                            "name": getattr(tool_call, "name", ""),
-                            "arguments": getattr(tool_call, "arguments", "{}"),
-                        },
-                    }
-                    tool_calls.append(tool_call_dict)
-
-        elif isinstance(message, ToolCallExecutionEvent):
-            # Extract tool results from ToolCallExecutionEvent
-            if hasattr(message, "content") and message.content:
-                tool_results = []
-                for execution_result in message.content:
-                    # FunctionExecutionResult has a content field
-                    result_content = execution_result.content
-                    try:
-                        # Try to parse as JSON first
-                        if isinstance(result_content, str):
-                            tool_results.append(json.loads(result_content))
-                        else:
-                            tool_results.append(result_content)
-                    except json.JSONDecodeError:
-                        # If not JSON, store as string
-                        tool_results.append(result_content)
-
-        return tool_calls, tool_results
 
     @staticmethod
     def _determine_conversation_status(stop_reason: str, conversation_history: List[Dict]) -> str:
