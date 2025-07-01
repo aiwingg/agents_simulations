@@ -28,6 +28,8 @@ from src.autogen_mas_factory import AutogenMASFactory
 from src.conversation_adapter import ConversationAdapter
 from src.autogen_tools import AutogenToolFactory
 from src.autogen_model_client import AutogenModelClientFactory
+from src.conversation_turn_manager import ConversationTurnManager
+from src.conversation_context import ConversationContext
 
 # Braintrust tracing import
 from braintrust import traced
@@ -53,6 +55,7 @@ class AutogenConversationEngine:
         self.logger = get_logger()
         self.error_handler = ConversationErrorHandler(self.logger)
         self.prompt_spec_name = prompt_spec_name
+        self.turn_manager = ConversationTurnManager(self.logger)
 
         # Load prompt specification
         self.prompt_manager = PromptSpecificationManager()
@@ -266,153 +269,92 @@ class AutogenConversationEngine:
             )
 
             # Conversation loop with timeout for entire conversation
-            try:
-                # Start timeout for entire conversation
-                conversation_start = time.time()
-                current_user_message = initial_task
-                last_active_agent = "agent"  # Default first agent
+            conversation_start = time.time()
+            current_user_message = initial_task
+            last_active_agent = "agent"
 
-                while context.turn_count < max_turns:
-                    # Check timeout for entire conversation
-                    if time.time() - conversation_start > timeout_sec:
-                        raise asyncio.TimeoutError(f"Conversation timeout after {timeout_sec} seconds")
+            while context.turn_count < max_turns:
+                if time.time() - conversation_start > timeout_sec:
+                    raise asyncio.TimeoutError(f"Conversation timeout after {timeout_sec} seconds")
 
-                    context.turn_count += 1
-
-                    self.logger.log_info(
-                        f"Turn {context.turn_count}: User -> {last_active_agent}",
-                        extra_data={
-                            "session_id": session_id,
-                            "user_message": current_user_message[:100],
-                            "target_agent": last_active_agent,
-                        },
+                try:
+                    turn_result = await self.turn_manager.execute_turn(
+                        swarm, current_user_message, last_active_agent, context
                     )
-
-                    # Run swarm with current user message
-                    task_result = await swarm.run(
-                        task=HandoffMessage(source="client", target=last_active_agent, content=current_user_message)
+                except TypeError as exc:
+                    end_time = time.time()
+                    duration = end_time - start_time
+                    task_result = getattr(exc, "task_result", None)
+                    history = ConversationAdapter.extract_conversation_history(
+                        context.all_messages, self.prompt_specification
                     )
-
-                    # Add all swarm messages to conversation history
-                    context.all_messages.extend(task_result.messages)
-
-                    # Get last message from MAS (should be TextMessage)
-                    last_message = task_result.messages[-1]
-                    if not isinstance(last_message, TextMessage):
-                        self.logger.log_error(
-                            f"MAS terminated with non-text message - cannot pass to user simulation. "
-                            f"Expected TextMessage, got {type(last_message).__name__}",
-                            extra_data={
-                                "session_id": session_id,
-                                "turn_count": context.turn_count,
-                                "message_type": type(last_message).__name__,
-                                "stop_reason": task_result.stop_reason,
-                                "total_mas_messages": len(task_result.messages),
-                                "scenario": scenario_name,
-                            },
-                        )
-                        # Stop conversation gracefully - create error result
-                        end_time = time.time()
-                        duration = end_time - context.start_time
-
-                        return {
-                            "session_id": session_id,
-                            "scenario": scenario_name,
-                            "status": "failed",
-                            "error": f"MAS terminated with non-text message ({type(last_message).__name__})",
-                            "error_type": "NonTextMessageError",
-                            "total_turns": context.turn_count,
-                            "duration_seconds": duration,
-                            "tools_used": True,
-                            "conversation_history": ConversationAdapter.extract_conversation_history(
-                                context.all_messages, self.prompt_specification
-                            ),
-                            "start_time": datetime.fromtimestamp(context.start_time).isoformat(),
-                            "end_time": datetime.fromtimestamp(end_time).isoformat(),
-                            "mas_stop_reason": task_result.stop_reason,
-                            "mas_message_count": len(task_result.messages),
-                        }
-
-                    # Update last active agent for next iteration
-                    last_active_agent = last_message.source
-
-                    self.logger.log_info(
-                        f"Turn {context.turn_count}: {last_active_agent} -> User",
-                        extra_data={
-                            "session_id": session_id,
-                            "agent_response": last_message.content[:100],
-                            "stop_reason": task_result.stop_reason,
-                        },
-                    )
-
-                    # Check if conversation naturally ended (only on actual termination conditions)
-                    # TODO: this is a hack to check if the conversation ended naturally, think how to refactor this to normal behavior.
-                    if task_result.stop_reason and any(
-                        term in task_result.stop_reason.lower()
-                        for term in ["terminate", "end", "finished", "completed"]
-                    ):
-                        self.logger.log_info(f"Conversation ended naturally: {task_result.stop_reason}")
-                        break
-
-                    # If we've reached max turns, break
-                    if context.turn_count >= max_turns:
-                        self.logger.log_info(f"Reached max_turns ({max_turns})")
-                        break
-
-                    # Get user response via user simulation agent
-                    user_response = await user_agent.on_messages([last_message], None)
-                    current_user_message = user_response.chat_message.content
-
-                    # Add user response to conversation history as a client message
-                    user_message = TextMessage(content=current_user_message, source="client")
-                    context.all_messages.append(user_message)
-
-                    self.logger.log_info(
-                        "User simulation agent generated response",
-                        extra_data={"session_id": session_id, "user_response": current_user_message[:100]},
-                    )
-
-                end_time = time.time()
-                duration = end_time - context.start_time
-
-                self.logger.log_info(
-                    "AutoGen conversation loop completed",
-                    extra_data={
+                    return {
                         "session_id": session_id,
-                        "duration": duration,
+                        "scenario": scenario_name,
+                        "status": "failed",
+                        "error": str(exc),
+                        "error_type": "NonTextMessageError",
                         "total_turns": context.turn_count,
-                        "messages_count": len(context.all_messages),
-                    },
+                        "duration_seconds": duration,
+                        "tools_used": True,
+                        "conversation_history": history,
+                        "start_time": datetime.fromtimestamp(start_time).isoformat(),
+                        "end_time": datetime.fromtimestamp(end_time).isoformat(),
+                        "mas_stop_reason": getattr(task_result, "stop_reason", None),
+                        "mas_message_count": len(getattr(task_result, "messages", [])),
+                    }
+
+                last_active_agent = turn_result.last_message.source
+
+                if not turn_result.should_continue:
+                    break
+
+                current_user_message = await self.turn_manager.generate_user_response(
+                    user_agent, turn_result.last_message
+                )
+                context.all_messages.append(TextMessage(content=current_user_message, source="client"))
+                self.logger.log_info(
+                    "User simulation agent generated response",
+                    extra_data={"session_id": session_id, "user_response": current_user_message[:100]},
                 )
 
-                # Create a synthetic TaskResult for ConversationAdapter
-                synthetic_result = TaskResult(messages=context.all_messages, stop_reason=f"completed_{context.turn_count}_turns")
+            end_time = time.time()
+            duration = end_time - context.start_time
 
-                # Convert to contract format using ConversationAdapter
-                result = ConversationAdapter.autogen_to_contract_format(
-                    task_result=synthetic_result,
-                    session_id=session_id,
-                    scenario_name=scenario_name,
-                    duration=duration,
-                    start_time=context.start_time,
-                    prompt_spec=self.prompt_specification,
-                )
+            self.logger.log_info(
+                "AutoGen conversation loop completed",
+                extra_data={
+                    "session_id": session_id,
+                    "duration": duration,
+                    "total_turns": context.turn_count,
+                    "messages_count": len(context.all_messages),
+                },
+            )
 
-                # Log conversation completion
-                self.logger.log_conversation_complete(
-                    session_id=session_id,
-                    total_turns=result.get("total_turns", 0),
-                    status=result.get("status", "completed"),
-                )
+            # Create a synthetic TaskResult for ConversationAdapter
+            synthetic_result = TaskResult(
+                messages=context.all_messages,
+                stop_reason=f"completed_{context.turn_count}_turns",
+            )
 
-                return result
+            # Convert to contract format using ConversationAdapter
+            result = ConversationAdapter.autogen_to_contract_format(
+                task_result=synthetic_result,
+                session_id=session_id,
+                scenario_name=scenario_name,
+                duration=duration,
+                start_time=context.start_time,
+                prompt_spec=self.prompt_specification,
+            )
 
-            except asyncio.TimeoutError:
-                return self.error_handler.handle_timeout_error(
-                    context=context,
-                    scenario_name=scenario_name,
-                    timeout_sec=timeout_sec,
-                )
+            # Log conversation completion
+            self.logger.log_conversation_complete(
+                session_id=session_id,
+                total_turns=result.get("total_turns", 0),
+                status=result.get("status", "completed"),
+            )
+
+            return result
 
         except Exception as e:
             return self.error_handler.handle_error_by_type(
