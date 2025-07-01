@@ -43,10 +43,6 @@ graph LR
     Infra --> FS
 ```
 
-The Service layer orchestrates multiple components. Conversations are parsed by
-`AutogenMessageParser`, matched with tools via `ToolFlushStateMachine`, and
-formatted by `ConversationAdapter` before being stored or evaluated.
-
 ## Core Modules
 - **llm-simulation-service** – backend Flask application with business logic and integrations
 - **llm-simulation-frontend** – React interface for launching and monitoring simulations
