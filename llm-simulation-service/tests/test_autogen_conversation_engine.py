@@ -4,8 +4,7 @@ Tests for AutogenConversationEngine
 
 import pytest
 import asyncio
-from unittest.mock import Mock, AsyncMock, patch, MagicMock
-from datetime import datetime
+from unittest.mock import Mock, AsyncMock, patch
 
 from src.autogen_conversation_engine import AutogenConversationEngine
 from src.openai_wrapper import OpenAIWrapper
