@@ -91,6 +91,22 @@ Business logic for managing agent specifications and conversation configurations
 **File**: `src/conversation_adapter.py`
 **Business Logic Coverage**: Translates AutoGen messages and task results to the existing conversation result format for evaluator and batch processor consumption.
 
+### Autogen Message Parser
+**File**: `src/autogen_message_parser.py`
+**Business Logic Coverage**: Parses individual AutoGen messages, skipping system events and extracting tool call and result details.
+
+### Speaker Display Name Resolver
+**File**: `src/speaker_display_name_resolver.py`
+**Business Logic Coverage**: Resolves human friendly display names for agents using the prompt specification.
+
+### Tool Flush State Machine
+**File**: `src/tool_flush_state_machine.py`
+**Business Logic Coverage**: Matches tool call requests to execution events by ID and flushes them to text messages, handling orphaned tool events.
+
+### Parsed Message DTO
+**File**: `src/dtos/parsed_message.py`
+**Business Logic Coverage**: Data transfer object returned by `AutogenMessageParser` representing a normalized message structure.
+
 ## Integration with Infrastructure Layer
 
 ### Port Interfaces

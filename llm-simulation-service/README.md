@@ -49,6 +49,10 @@ graph TB
         EV[Evaluator<br/>evaluator.py]
         PS[Prompt Specification<br/>prompt_specification.py]
         TS[Tools Specification<br/>tools_specification.py]
+        CA[Conversation Adapter<br/>conversation_adapter.py]
+        AMP[Autogen Message Parser<br/>autogen_message_parser.py]
+        SDR[Speaker Display Name Resolver<br/>speaker_display_name_resolver.py]
+        TFSM[Tool Flush State Machine<br/>tool_flush_state_machine.py]
         
         CE --> |orchestrates| MA[Multi-Agent<br/>Conversations]
         BP --> |delegates to| BO
@@ -57,6 +61,10 @@ graph TB
         BO --> |controls with| BRM
         SP --> |evaluates with| EV
         SP --> |creates| CE
+        CE --> |outputs to| CA
+        CA --> |uses| AMP
+        CA --> |uses| SDR
+        CA --> |uses| TFSM
     end
     
     subgraph "Infrastructure Layer"
@@ -103,7 +111,7 @@ graph TB
     classDef external fill:#fff3e0
     
     class API,BR,PR,UR presentation
-    class CE,BP,BO,SP,BPT,BRM,EV,PS,TS,MA service
+    class CE,BP,BO,SP,BPT,BRM,EV,PS,TS,CA,AMP,SDR,TFSM,MA service
     class OW,PST,RS,TE,WM,LU infrastructure
     class OPENAI,FS,WH,EXT_API external
 ```
