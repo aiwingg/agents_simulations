@@ -6,11 +6,10 @@ Replaces the existing ConversationEngine with multi-agent orchestration capabili
 
 import asyncio
 import time
-from typing import Dict, List, Any, Optional, Tuple
+from typing import Dict, Any, Optional, Tuple
 from datetime import datetime
 
 # AutoGen imports
-from autogen_agentchat.teams import Swarm
 from autogen_agentchat.messages import HandoffMessage, TextMessage
 from autogen_agentchat.agents import AssistantAgent
 from autogen_agentchat.base import TaskResult
@@ -19,6 +18,8 @@ from autogen_agentchat.base import TaskResult
 from src.openai_wrapper import OpenAIWrapper
 from src.webhook_manager import WebhookManager
 from src.logging_utils import get_logger
+from src.conversation_context import ConversationContext
+from src.conversation_error_handler import ConversationErrorHandler
 from src.prompt_specification import PromptSpecificationManager, SystemPromptSpecification
 from src.config import Config
 
@@ -50,6 +51,7 @@ class AutogenConversationEngine:
         self.openai = openai_wrapper
         self.webhook_manager = WebhookManager()
         self.logger = get_logger()
+        self.error_handler = ConversationErrorHandler(self.logger)
         self.prompt_spec_name = prompt_spec_name
 
         # Load prompt specification
@@ -96,7 +98,7 @@ class AutogenConversationEngine:
             `docs/contracts/dto/conversation_history_item.md`.
         """
         self.logger.log_info(
-            f"Running basic conversation via AutoGen Swarm",
+            "Running basic conversation via AutoGen Swarm",
             extra_data={
                 "scenario": scenario.get("name", "unknown"),
                 "max_turns": max_turns,
@@ -160,7 +162,6 @@ class AutogenConversationEngine:
 
         scenario_name = scenario.get("name", "unknown")
         variables = scenario.get("variables", {})
-        seed = variables.get("SEED")
 
         # Use webhook session_id if available, otherwise initialize a new session
         webhook_session_id = None
@@ -184,7 +185,7 @@ class AutogenConversationEngine:
         try:
             formatted_spec = self.prompt_specification.format_with_variables(variables)
             self.logger.log_info(
-                f"Successfully formatted prompt specification",
+                "Successfully formatted prompt specification",
                 extra_data={"session_id": session_id, "agents_formatted": list(formatted_spec.agents.keys())},
             )
         except Exception as e:
@@ -199,7 +200,7 @@ class AutogenConversationEngine:
             raise
 
         self.logger.log_info(
-            f"Starting AutoGen conversation simulation with tools",
+            "Starting AutoGen conversation simulation with tools",
             extra_data={
                 "session_id": session_id,
                 "scenario": scenario_name,
@@ -212,8 +213,13 @@ class AutogenConversationEngine:
         )
 
         start_time = time.time()
-        all_messages = []  # Track all conversation messages
-        turn_count = 0
+        context = ConversationContext(
+            session_id=session_id,
+            scenario_name=scenario_name,
+            max_turns=max_turns,
+            timeout_sec=timeout_sec,
+            start_time=start_time,
+        )
 
         try:
             # Create AutoGen model client from OpenAIWrapper
@@ -249,7 +255,7 @@ class AutogenConversationEngine:
                 initial_task = variables["GREETING"]
 
             self.logger.log_info(
-                f"Starting AutoGen conversation loop",
+                "Starting AutoGen conversation loop",
                 extra_data={
                     "session_id": session_id,
                     "initial_task": initial_task,
@@ -266,15 +272,15 @@ class AutogenConversationEngine:
                 current_user_message = initial_task
                 last_active_agent = "agent"  # Default first agent
 
-                while turn_count < max_turns:
+                while context.turn_count < max_turns:
                     # Check timeout for entire conversation
                     if time.time() - conversation_start > timeout_sec:
                         raise asyncio.TimeoutError(f"Conversation timeout after {timeout_sec} seconds")
 
-                    turn_count += 1
+                    context.turn_count += 1
 
                     self.logger.log_info(
-                        f"Turn {turn_count}: User -> {last_active_agent}",
+                        f"Turn {context.turn_count}: User -> {last_active_agent}",
                         extra_data={
                             "session_id": session_id,
                             "user_message": current_user_message[:100],
@@ -288,7 +294,7 @@ class AutogenConversationEngine:
                     )
 
                     # Add all swarm messages to conversation history
-                    all_messages.extend(task_result.messages)
+                    context.all_messages.extend(task_result.messages)
 
                     # Get last message from MAS (should be TextMessage)
                     last_message = task_result.messages[-1]
@@ -298,7 +304,7 @@ class AutogenConversationEngine:
                             f"Expected TextMessage, got {type(last_message).__name__}",
                             extra_data={
                                 "session_id": session_id,
-                                "turn_count": turn_count,
+                                "turn_count": context.turn_count,
                                 "message_type": type(last_message).__name__,
                                 "stop_reason": task_result.stop_reason,
                                 "total_mas_messages": len(task_result.messages),
@@ -307,7 +313,7 @@ class AutogenConversationEngine:
                         )
                         # Stop conversation gracefully - create error result
                         end_time = time.time()
-                        duration = end_time - start_time
+                        duration = end_time - context.start_time
 
                         return {
                             "session_id": session_id,
@@ -315,13 +321,13 @@ class AutogenConversationEngine:
                             "status": "failed",
                             "error": f"MAS terminated with non-text message ({type(last_message).__name__})",
                             "error_type": "NonTextMessageError",
-                            "total_turns": turn_count,
+                            "total_turns": context.turn_count,
                             "duration_seconds": duration,
                             "tools_used": True,
                             "conversation_history": ConversationAdapter.extract_conversation_history(
-                                all_messages, self.prompt_specification
+                                context.all_messages, self.prompt_specification
                             ),
-                            "start_time": datetime.fromtimestamp(start_time).isoformat(),
+                            "start_time": datetime.fromtimestamp(context.start_time).isoformat(),
                             "end_time": datetime.fromtimestamp(end_time).isoformat(),
                             "mas_stop_reason": task_result.stop_reason,
                             "mas_message_count": len(task_result.messages),
@@ -331,7 +337,7 @@ class AutogenConversationEngine:
                     last_active_agent = last_message.source
 
                     self.logger.log_info(
-                        f"Turn {turn_count}: {last_active_agent} -> User",
+                        f"Turn {context.turn_count}: {last_active_agent} -> User",
                         extra_data={
                             "session_id": session_id,
                             "agent_response": last_message.content[:100],
@@ -349,7 +355,7 @@ class AutogenConversationEngine:
                         break
 
                     # If we've reached max turns, break
-                    if turn_count >= max_turns:
+                    if context.turn_count >= max_turns:
                         self.logger.log_info(f"Reached max_turns ({max_turns})")
                         break
 
@@ -359,28 +365,28 @@ class AutogenConversationEngine:
 
                     # Add user response to conversation history as a client message
                     user_message = TextMessage(content=current_user_message, source="client")
-                    all_messages.append(user_message)
+                    context.all_messages.append(user_message)
 
                     self.logger.log_info(
-                        f"User simulation agent generated response",
+                        "User simulation agent generated response",
                         extra_data={"session_id": session_id, "user_response": current_user_message[:100]},
                     )
 
                 end_time = time.time()
-                duration = end_time - start_time
+                duration = end_time - context.start_time
 
                 self.logger.log_info(
-                    f"AutoGen conversation loop completed",
+                    "AutoGen conversation loop completed",
                     extra_data={
                         "session_id": session_id,
                         "duration": duration,
-                        "total_turns": turn_count,
-                        "messages_count": len(all_messages),
+                        "total_turns": context.turn_count,
+                        "messages_count": len(context.all_messages),
                     },
                 )
 
                 # Create a synthetic TaskResult for ConversationAdapter
-                synthetic_result = TaskResult(messages=all_messages, stop_reason=f"completed_{turn_count}_turns")
+                synthetic_result = TaskResult(messages=context.all_messages, stop_reason=f"completed_{context.turn_count}_turns")
 
                 # Convert to contract format using ConversationAdapter
                 result = ConversationAdapter.autogen_to_contract_format(
@@ -388,7 +394,7 @@ class AutogenConversationEngine:
                     session_id=session_id,
                     scenario_name=scenario_name,
                     duration=duration,
-                    start_time=start_time,
+                    start_time=context.start_time,
                     prompt_spec=self.prompt_specification,
                 )
 
@@ -402,100 +408,16 @@ class AutogenConversationEngine:
                 return result
 
             except asyncio.TimeoutError:
-                end_time = time.time()
-                duration = end_time - start_time
-
-                self.logger.log_error(
-                    f"AutoGen conversation timeout after {timeout_sec} seconds",
-                    extra_data={
-                        "session_id": session_id,
-                        "timeout_sec": timeout_sec,
-                        "actual_duration": duration,
-                        "scenario_name": scenario_name,
-                        "completed_turns": turn_count,
-                    },
+                return self.error_handler.handle_timeout_error(
+                    context=context,
+                    scenario_name=scenario_name,
+                    timeout_sec=timeout_sec,
                 )
-
-                history = ConversationAdapter.extract_conversation_history(all_messages, self.prompt_specification)
-
-                # Return timeout result in contract format
-                return {
-                    "session_id": session_id,
-                    "scenario": scenario_name,
-                    "status": "timeout",
-                    "error": f"Conversation timeout after {timeout_sec} seconds",
-                    "error_type": "TimeoutError",
-                    "total_turns": turn_count,
-                    "duration_seconds": duration,
-                    "conversation_history": history,
-                    "start_time": datetime.fromtimestamp(start_time).isoformat(),
-                    "end_time": datetime.fromtimestamp(end_time).isoformat(),
-                    "tools_used": True,
-                }
 
         except Exception as e:
-            end_time = time.time()
-            duration = end_time - start_time
-
-            # Enhanced error logging with more context
-            error_context = {
-                "session_id": session_id,
-                "scenario_name": scenario_name,
-                "duration_so_far": duration,
-                "max_turns": max_turns,
-                "timeout_sec": timeout_sec,
-                "completed_turns": turn_count,
-                "error_type": type(e).__name__,
-                "spec_name": self.prompt_spec_name,
-            }
-
-            # Check if this is a geographic restriction or persistent OpenAI API failure
-            error_message = str(e).lower()
-            is_api_blocked = (
-                "geographic restriction" in error_message
-                or "unsupported_country_region_territory" in error_message
-                or "blocked due to geographic" in error_message
+            return self.error_handler.handle_error_by_type(
+                error=e,
+                context=context,
+                scenario_name=scenario_name,
+                spec_name=self.prompt_spec_name,
             )
-
-            if is_api_blocked:
-                self.logger.log_error(
-                    f"OpenAI API blocked in AutoGen engine - attempting graceful degradation: {str(e)}",
-                    exception=e,
-                    extra_data=error_context,
-                )
-
-                # Return a graceful failure with some useful information
-                return {
-                    "session_id": session_id,
-                    "scenario": scenario_name,
-                    "status": "failed_api_blocked",
-                    "error": "OpenAI API blocked due to geographic restrictions",
-                    "error_type": "APIBlockedError",
-                    "total_turns": turn_count,
-                    "duration_seconds": duration,
-                    "tools_used": True,
-                    "conversation_history": [],
-                    "start_time": datetime.fromtimestamp(start_time).isoformat(),
-                    "end_time": datetime.fromtimestamp(end_time).isoformat(),
-                    "graceful_degradation": True,
-                    "partial_completion": turn_count > 0,
-                }
-            else:
-                self.logger.log_error(
-                    f"AutoGen conversation with tools failed: {str(e)}", exception=e, extra_data=error_context
-                )
-
-            return {
-                "session_id": session_id,
-                "scenario": scenario_name,
-                "status": "failed",
-                "error": str(e),
-                "error_type": type(e).__name__,
-                "total_turns": turn_count,
-                "duration_seconds": duration,
-                "tools_used": True,
-                "conversation_history": [],
-                "start_time": datetime.fromtimestamp(start_time).isoformat(),
-                "end_time": datetime.fromtimestamp(end_time).isoformat(),
-                "error_context": error_context,
-            }
