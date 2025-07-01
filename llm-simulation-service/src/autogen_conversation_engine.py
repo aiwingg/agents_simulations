@@ -30,6 +30,7 @@ from src.autogen_tools import AutogenToolFactory
 from src.autogen_model_client import AutogenModelClientFactory
 from src.conversation_turn_manager import ConversationTurnManager
 from src.conversation_context import ConversationContext
+from src.conversation_loop_orchestrator import ConversationLoopOrchestrator
 
 # Braintrust tracing import
 from braintrust import traced
@@ -56,6 +57,7 @@ class AutogenConversationEngine:
         self.error_handler = ConversationErrorHandler(self.logger)
         self.prompt_spec_name = prompt_spec_name
         self.turn_manager = ConversationTurnManager(self.logger)
+        self.loop_orchestrator = ConversationLoopOrchestrator(self.turn_manager, self.logger)
 
         # Load prompt specification
         self.prompt_manager = PromptSpecificationManager()
@@ -145,221 +147,77 @@ class AutogenConversationEngine:
     async def run_conversation_with_tools(
         self, scenario: Dict[str, Any], max_turns: Optional[int] = None, timeout_sec: Optional[int] = None
     ) -> Dict[str, Any]:
-        """
-        Run conversation simulation with tool calling and multi-agent handoff support using AutoGen Swarm.
-        Uses external UserProxy for user simulation and proper conversation loop.
-
-        Args:
-            scenario: Dictionary containing scenario name and variables
-            max_turns: Maximum number of conversation turns (optional)
-            timeout_sec: Timeout in seconds (optional)
-
-        Returns:
-            Dictionary matching existing ConversationEngine output contract.
-            The `conversation_history` value is a list of
-            `ConversationHistoryItem` dictionaries. See
-            `docs/contracts/dto/conversation_history_item.md` for details.
-        """
+        """Run conversation simulation with tools using AutoGen Swarm."""
         max_turns = max_turns or Config.MAX_TURNS
         timeout_sec = timeout_sec or Config.TIMEOUT_SEC
 
-        scenario_name = scenario.get("name", "unknown")
+        name = scenario.get("name", "unknown")
         variables = scenario.get("variables", {})
+        start = time.time()
 
-        # Use webhook session_id if available, otherwise initialize a new session
-        webhook_session_id = None
-        client_id = variables.get("client_id")
-        if client_id:
-            # Get session_id from webhook if client_id is provided
-            client_data = await self.webhook_manager.get_client_data(client_id)
-            webhook_session_id = client_data.get("session_id")
-
-        if webhook_session_id:
-            session_id = webhook_session_id
-            self.logger.log_info(f"Using session_id from webhook: {session_id}")
-        else:
-            session_id = await self.webhook_manager.initialize_session()
-            self.logger.log_info(f"Using generated session_id: {session_id}")
-
-        # Enrich variables with client data and apply defaults
-        variables, _ = await self._enrich_variables_with_client_data(variables, session_id)
-
-        # Format prompt specification with variables
-        try:
-            formatted_spec = self.prompt_specification.format_with_variables(variables)
-            self.logger.log_info(
-                "Successfully formatted prompt specification",
-                extra_data={"session_id": session_id, "agents_formatted": list(formatted_spec.agents.keys())},
-            )
-        except Exception as e:
-            self.logger.log_error(
-                f"Failed to format prompt specification: {e}",
-                extra_data={
-                    "session_id": session_id,
-                    "spec_name": self.prompt_spec_name,
-                    "variables_count": len(variables),
-                },
-            )
-            raise
-
-        self.logger.log_info(
-            "Starting AutoGen conversation simulation with tools",
-            extra_data={
-                "session_id": session_id,
-                "scenario": scenario_name,
-                "max_turns": max_turns,
-                "timeout_sec": timeout_sec,
-                "has_client_id": "client_id" in scenario.get("variables", {}),
-                "using_webhook_session": bool(webhook_session_id),
-                "spec_name": self.prompt_spec_name,
-            },
-        )
-
-        start_time = time.time()
         context = ConversationContext(
-            session_id=session_id,
-            scenario_name=scenario_name,
+            session_id=await self.webhook_manager.initialize_session(),
+            scenario_name=name,
             max_turns=max_turns,
             timeout_sec=timeout_sec,
-            start_time=start_time,
+            start_time=start,
         )
 
+        variables, webhook_sid = await self._enrich_variables_with_client_data(variables, context.session_id)
+        if webhook_sid:
+            context.session_id = webhook_sid
+
         try:
-            # Create AutoGen model client from OpenAIWrapper
-            model_client = AutogenModelClientFactory.create_from_openai_wrapper(self.openai)
+            spec = self.prompt_specification.format_with_variables(variables)
+            model = AutogenModelClientFactory.create_from_openai_wrapper(self.openai)
+            user_agent = self._create_user_agent(model, spec)
+            tool_names = {t for a in spec.agents.values() for t in a.tools}
+            tools = AutogenToolFactory(context.session_id).get_tools_for_agent(list(tool_names))
+            swarm = AutogenMASFactory(context.session_id).create_swarm_team(spec, tools, model)
+            initial = variables.get("client_greeting") or variables.get("GREETING") or "Добрый день!"
+            await self.loop_orchestrator.run_conversation_loop(swarm, user_agent, initial, context)
+        except TypeError as exc:
+            return self._format_non_text_error(exc, context, name, start)
+        except Exception as err:
+            return self.error_handler.handle_error_by_type(err, context, name, self.prompt_spec_name)
 
-            # Create user simulation agent using formatted spec
-            user_agent = self._create_user_agent(model_client, formatted_spec)
+        duration = time.time() - context.start_time
+        synthetic = TaskResult(messages=context.all_messages, stop_reason=f"completed_{context.turn_count}_turns")
+        result = ConversationAdapter.autogen_to_contract_format(
+            task_result=synthetic,
+            session_id=context.session_id,
+            scenario_name=name,
+            duration=duration,
+            start_time=context.start_time,
+            prompt_spec=self.prompt_specification,
+        )
+        self.logger.log_conversation_complete(
+            session_id=context.session_id,
+            total_turns=result.get("total_turns", 0),
+            status=result.get("status", "completed"),
+        )
+        return result
 
-            # Create session-isolated tool factory
-            tool_factory = AutogenToolFactory(session_id)
-
-            # Collect all unique tool names from all agents in formatted spec
-            all_tool_names = set()
-            for agent_spec in formatted_spec.agents.values():
-                all_tool_names.update(agent_spec.tools)
-
-            # Create tools for all agents (session-isolated)
-            tools = tool_factory.get_tools_for_agent(list(all_tool_names))
-
-            # Create AutoGen Swarm team using formatted spec (without user as participant)
-            mas_factory = AutogenMASFactory(session_id)
-            swarm = mas_factory.create_swarm_team(
-                system_prompt_spec=formatted_spec, tools=tools, model_client=model_client
-            )
-
-            # Prepare initial task based on system prompt spec
-            initial_task = "Добрый день!"  # Default greeting
-
-            # If there's a specific client prompt or greeting in variables, use that
-            if "client_greeting" in variables:
-                initial_task = variables["client_greeting"]
-            elif "GREETING" in variables:
-                initial_task = variables["GREETING"]
-
-            self.logger.log_info(
-                "Starting AutoGen conversation loop",
-                extra_data={
-                    "session_id": session_id,
-                    "initial_task": initial_task,
-                    "agents_count": len(self.prompt_specification.agents),
-                    "tools_count": len(tools),
-                    "max_turns": max_turns,
-                },
-            )
-
-            # Conversation loop with timeout for entire conversation
-            conversation_start = time.time()
-            current_user_message = initial_task
-            last_active_agent = "agent"
-
-            while context.turn_count < max_turns:
-                if time.time() - conversation_start > timeout_sec:
-                    raise asyncio.TimeoutError(f"Conversation timeout after {timeout_sec} seconds")
-
-                try:
-                    turn_result = await self.turn_manager.execute_turn(
-                        swarm, current_user_message, last_active_agent, context
-                    )
-                except TypeError as exc:
-                    end_time = time.time()
-                    duration = end_time - start_time
-                    task_result = getattr(exc, "task_result", None)
-                    history = ConversationAdapter.extract_conversation_history(
-                        context.all_messages, self.prompt_specification
-                    )
-                    return {
-                        "session_id": session_id,
-                        "scenario": scenario_name,
-                        "status": "failed",
-                        "error": str(exc),
-                        "error_type": "NonTextMessageError",
-                        "total_turns": context.turn_count,
-                        "duration_seconds": duration,
-                        "tools_used": True,
-                        "conversation_history": history,
-                        "start_time": datetime.fromtimestamp(start_time).isoformat(),
-                        "end_time": datetime.fromtimestamp(end_time).isoformat(),
-                        "mas_stop_reason": getattr(task_result, "stop_reason", None),
-                        "mas_message_count": len(getattr(task_result, "messages", [])),
-                    }
-
-                last_active_agent = turn_result.last_message.source
-
-                if not turn_result.should_continue:
-                    break
-
-                current_user_message = await self.turn_manager.generate_user_response(
-                    user_agent, turn_result.last_message
-                )
-                context.all_messages.append(TextMessage(content=current_user_message, source="client"))
-                self.logger.log_info(
-                    "User simulation agent generated response",
-                    extra_data={"session_id": session_id, "user_response": current_user_message[:100]},
-                )
-
-            end_time = time.time()
-            duration = end_time - context.start_time
-
-            self.logger.log_info(
-                "AutoGen conversation loop completed",
-                extra_data={
-                    "session_id": session_id,
-                    "duration": duration,
-                    "total_turns": context.turn_count,
-                    "messages_count": len(context.all_messages),
-                },
-            )
-
-            # Create a synthetic TaskResult for ConversationAdapter
-            synthetic_result = TaskResult(
-                messages=context.all_messages,
-                stop_reason=f"completed_{context.turn_count}_turns",
-            )
-
-            # Convert to contract format using ConversationAdapter
-            result = ConversationAdapter.autogen_to_contract_format(
-                task_result=synthetic_result,
-                session_id=session_id,
-                scenario_name=scenario_name,
-                duration=duration,
-                start_time=context.start_time,
-                prompt_spec=self.prompt_specification,
-            )
-
-            # Log conversation completion
-            self.logger.log_conversation_complete(
-                session_id=session_id,
-                total_turns=result.get("total_turns", 0),
-                status=result.get("status", "completed"),
-            )
-
-            return result
-
-        except Exception as e:
-            return self.error_handler.handle_error_by_type(
-                error=e,
-                context=context,
-                scenario_name=scenario_name,
-                spec_name=self.prompt_spec_name,
-            )
+    def _format_non_text_error(
+        self, exc: TypeError, context: ConversationContext, scenario_name: str, start: float
+    ) -> Dict[str, Any]:
+        task_result = getattr(exc, "task_result", None)
+        history = ConversationAdapter.extract_conversation_history(
+            context.all_messages, self.prompt_specification
+        )
+        end = time.time()
+        return {
+            "session_id": context.session_id,
+            "scenario": scenario_name,
+            "status": "failed",
+            "error": str(exc),
+            "error_type": "NonTextMessageError",
+            "total_turns": context.turn_count,
+            "duration_seconds": end - start,
+            "tools_used": True,
+            "conversation_history": history,
+            "start_time": datetime.fromtimestamp(start).isoformat(),
+            "end_time": datetime.fromtimestamp(end).isoformat(),
+            "mas_stop_reason": getattr(task_result, "stop_reason", None),
+            "mas_message_count": len(getattr(task_result, "messages", [])),
+        }
