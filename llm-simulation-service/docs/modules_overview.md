@@ -19,6 +19,9 @@ This document provides a comprehensive mapping of all source code modules to the
 | `src/speaker_display_name_resolver.py` | Service | Resolve speaker display names from prompt specs | [SpeakerDisplayNameResolver Contract](contracts/service_layer_contracts/speaker_display_name_resolver_contract.md) |
 | `src/tool_flush_state_machine.py` | Service | Match tool calls/results and flush to messages | [ToolFlushStateMachine Contract](contracts/service_layer_contracts/tool_flush_state_machine_contract.md) |
 | `src/dtos/parsed_message.py` | Service | DTO representing parsed AutoGen message | [ParsedMessage DTO](contracts/dto/parsed_message_dto.md) |
+| `src/conversation_context.py` | Service | Dataclass representing conversation state | N/A |
+| `src/turn_result.py` | Service | Dataclass representing single turn outcome | N/A |
+| `src/scenario_variable_enricher.py` | Service | Scenario variable enrichment helpers | N/A |
 | `src/batch_processor.py` | Service | Parallel batch processing and workflow coordination | [Batch Processor Contract](contracts/service_layer_contracts/batch_processor_contract.md) |
 | `src/evaluator.py` | Service | Conversation scoring and quality assessment logic | [Evaluator Contract](contracts/service_layer_contracts/evaluator_contract.md) |
 | `src/prompt_specification.py` | Service | Agent configuration and prompt management logic | [Prompt Specification Contract](contracts/specification_contracts/prompt_specification_contract.md) |

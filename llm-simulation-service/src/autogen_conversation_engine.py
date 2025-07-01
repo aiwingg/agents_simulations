@@ -69,88 +69,12 @@ class AutogenConversationEngine:
     async def _enrich_variables_with_client_data(
         self, variables: Dict[str, Any], session_id: str
     ) -> Tuple[Dict[str, Any], Optional[str]]:
-        """
-        Enrich variables with client data from webhook if client_id is provided.
-        Falls back to existing values if client_id is not present.
-        Also applies default values for template formatting.
-        Reuses existing logic from ConversationEngine for compatibility.
+        """Delegate enrichment to the ScenarioVariableEnricher service."""
+        from src.scenario_variable_enricher import enrich_scenario_variables
 
-        Args:
-            variables: Dictionary of scenario variables
-            session_id: Session ID to add to variables
-
-        Returns:
-            Tuple of (enriched_variables, session_id_from_webhook)
-        """
-        variables = variables.copy()
-        webhook_session_id = None
-
-        # Check if client_id is provided
-        client_id = variables.get("client_id")
-        if client_id:
-            self.logger.log_info(f"Found client_id in scenario: {client_id}")
-
-            # Fetch client data from webhook (both variables and session_id)
-            client_data = await self.webhook_manager.get_client_data(client_id)
-            client_variables = client_data["variables"]
-            webhook_session_id = client_data["session_id"]
-
-            # Override the hardcoded variables with webhook data
-            variables.update(client_variables)
-
-            # Also set the lowercase versions for template compatibility
-            variables["name"] = client_variables.get("NAME", "")
-            variables["locations"] = client_variables.get("LOCATIONS", "")
-            variables["delivery_days"] = client_variables.get("DELIVERY_DAYS", "")
-            variables["purchase_history"] = client_variables.get("PURCHASE_HISTORY", "")
-            variables["current_date"] = variables.get("CURRENT_DATE", "")
-            if variables["current_date"] == "":
-                variables["current_date"] = client_variables.get("CURRENT_DATE", "")
-
-            self.logger.log_info(
-                f"Enriched variables with client data",
-                extra_data={
-                    "client_id": client_id,
-                    "has_dynamic_data": bool(client_variables.get("LOCATIONS")),
-                    "has_webhook_session_id": bool(webhook_session_id),
-                },
-            )
-        else:
-            # No client_id provided, use existing variables or set defaults
-            self.logger.log_info("No client_id provided, using existing variables")
-            # Ensure lowercase versions exist for template compatibility
-            if "LOCATIONS" in variables and "locations" not in variables:
-                variables["locations"] = variables["LOCATIONS"]
-            if "DELIVERY_DAYS" in variables and "delivery_days" not in variables:
-                variables["delivery_days"] = variables["DELIVERY_DAYS"]
-            if "PURCHASE_HISTORY" in variables and "purchase_history" not in variables:
-                variables["purchase_history"] = variables["PURCHASE_HISTORY"]
-            if "NAME" in variables and "name" not in variables:
-                variables["name"] = variables["NAME"]
-
-        # Add session_id to variables
-        variables["session_id"] = session_id
-
-        # Set default values for missing variables for template formatting
-        defaults = {
-            "CURRENT_DATE": "2024-01-15",
-            "current_date": "2024-01-15",
-            "DELIVERY_DAY": "завтра",
-            "delivery_days": "понедельник, среда, пятница",
-            "PURCHASE_HISTORY": "История покупок отсутствует",
-            "purchase_history": "История покупок отсутствует",
-            "name": variables.get("CLIENT_NAME", "Клиент"),
-            "locations": variables.get("LOCATION", "Адрес не указан"),
-            "CLIENT_NAME": variables.get("CLIENT_NAME", "Клиент"),
-            "LOCATION": variables.get("LOCATION", "Адрес не указан"),
-        }
-
-        # Add defaults for missing variables
-        for key, default_value in defaults.items():
-            if key not in variables:
-                variables[key] = default_value
-
-        return variables, webhook_session_id
+        return await enrich_scenario_variables(
+            variables, session_id, self.webhook_manager, self.logger
+        )
 
     @traced(name="autogen_run_conversation")
     async def run_conversation(
