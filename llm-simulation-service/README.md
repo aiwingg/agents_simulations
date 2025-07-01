@@ -40,31 +40,41 @@ graph TB
     end
     
     subgraph "Service Layer"
-        CE[Conversation Engine<br/>autogen_conversation_engine.py]
-        BP[Batch Processor<br/>batch_processor.py]
-        BO[Batch Orchestrator<br/>batch_orchestrator.py]
-        SP[Scenario Processor<br/>scenario_processor.py]
-        BPT[Batch Progress Tracker<br/>batch_progress_tracker.py]
-        BRM[Batch Resource Manager<br/>batch_resource_manager.py]
-        EV[Evaluator<br/>evaluator.py]
-        PS[Prompt Specification<br/>prompt_specification.py]
-        TS[Tools Specification<br/>tools_specification.py]
-        CA[Conversation Adapter<br/>conversation_adapter.py]
-        AMP[Autogen Message Parser<br/>autogen_message_parser.py]
-        SDR[Speaker Display Name Resolver<br/>speaker_display_name_resolver.py]
-        TFSM[Tool Flush State Machine<br/>tool_flush_state_machine.py]
+        subgraph "Batch Processing Module"
+            BP[Batch Processor<br/>batch_processor.py]
+            BO[Batch Orchestrator<br/>batch_orchestrator.py]
+            SP[Scenario Processor<br/>scenario_processor.py]
+            BPT[Batch Progress Tracker<br/>batch_progress_tracker.py]
+            BRM[Batch Resource Manager<br/>batch_resource_manager.py]
+            
+            BP --> |delegates to| BO
+            BO --> |processes with| SP
+            BO --> |tracks with| BPT
+            BO --> |controls with| BRM
+        end
+        
+        subgraph "Conversation Module"
+            CE[Conversation Engine<br/>autogen_conversation_engine.py]
+            CA[Conversation Adapter<br/>conversation_adapter.py]
+            AMP[Autogen Message Parser<br/>autogen_message_parser.py]
+            SDR[Speaker Display Name Resolver<br/>speaker_display_name_resolver.py]
+            TFSM[Tool Flush State Machine<br/>tool_flush_state_machine.py]
+            
+            CE --> |outputs to| CA
+            CA --> |uses| AMP
+            CA --> |uses| SDR
+            CA --> |uses| TFSM
+        end
+        
+        subgraph "Shared Services"
+            EV[Evaluator<br/>evaluator.py]
+            PS[Prompt Specification<br/>prompt_specification.py]
+            TS[Tools Specification<br/>tools_specification.py]
+        end
         
         CE --> |orchestrates| MA[Multi-Agent<br/>Conversations]
-        BP --> |delegates to| BO
-        BO --> |processes with| SP
-        BO --> |tracks with| BPT
-        BO --> |controls with| BRM
         SP --> |evaluates with| EV
         SP --> |creates| CE
-        CE --> |outputs to| CA
-        CA --> |uses| AMP
-        CA --> |uses| SDR
-        CA --> |uses| TFSM
     end
     
     subgraph "Infrastructure Layer"
