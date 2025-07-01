@@ -42,13 +42,21 @@ graph TB
     subgraph "Service Layer"
         CE[Conversation Engine<br/>autogen_conversation_engine.py]
         BP[Batch Processor<br/>batch_processor.py]
+        BO[Batch Orchestrator<br/>batch_orchestrator.py]
+        SP[Scenario Processor<br/>scenario_processor.py]
+        BPT[Batch Progress Tracker<br/>batch_progress_tracker.py]
+        BRM[Batch Resource Manager<br/>batch_resource_manager.py]
         EV[Evaluator<br/>evaluator.py]
         PS[Prompt Specification<br/>prompt_specification.py]
         TS[Tools Specification<br/>tools_specification.py]
         
         CE --> |orchestrates| MA[Multi-Agent<br/>Conversations]
-        BP --> |manages| CE
-        BP --> |scores with| EV
+        BP --> |delegates to| BO
+        BO --> |processes with| SP
+        BO --> |tracks with| BPT
+        BO --> |controls with| BRM
+        SP --> |evaluates with| EV
+        SP --> |creates| CE
     end
     
     subgraph "Infrastructure Layer"
@@ -95,7 +103,7 @@ graph TB
     classDef external fill:#fff3e0
     
     class API,BR,PR,UR presentation
-    class CE,BP,EV,PS,TS,MA service
+    class CE,BP,BO,SP,BPT,BRM,EV,PS,TS,MA service
     class OW,PST,RS,TE,WM,LU infrastructure
     class OPENAI,FS,WH,EXT_API external
 ```

@@ -23,14 +23,14 @@ The core business logic for managing conversations between multiple specialized 
 6. **Completion Detection**: Identify conversation end conditions and finalize results
 
 ### Batch Processing Orchestration
-Coordinates parallel execution of multiple conversation scenarios with comprehensive evaluation:
+Coordinates parallel execution of multiple conversation scenarios with comprehensive evaluation through specialized service components:
 
-1. **Job Creation**: Validate input scenarios and initialize batch metadata
-2. **Concurrent Execution**: Manage parallel conversation processing with configurable limits
-3. **Progress Coordination**: Track completion status across multiple conversations
-4. **Result Aggregation**: Collect conversation outputs and organize for evaluation
-5. **Quality Assessment**: Coordinate conversation scoring and feedback generation
-6. **Final Compilation**: Prepare complete batch results with statistics and summaries
+1. **Job Management**: Validate input scenarios and initialize batch metadata
+2. **Resource Management**: Control concurrent execution with configurable semaphore limits
+3. **Scenario Processing**: Handle individual scenario execution with engine isolation
+4. **Progress Tracking**: Monitor completion status with simplified percentage calculations
+5. **Execution Orchestration**: Coordinate concurrent task creation and result aggregation
+6. **Result Compilation**: Prepare complete batch results with statistics and summaries
 
 ### Conversation Evaluation Logic
 Automated quality assessment workflow for conversation scoring and analysis:
@@ -57,7 +57,23 @@ Business logic for managing agent specifications and conversation configurations
 
 ### Batch Processor
 **File**: `src/batch_processor.py`  
-**Business Logic Coverage**: Batch processing orchestration and result compilation workflows. Coordinates parallel execution and progress tracking across multiple scenarios.
+**Business Logic Coverage**: Simplified batch job lifecycle management and coordination. Delegates complex orchestration logic to specialized service components while maintaining the public interface contract.
+
+### Batch Orchestrator
+**File**: `src/batch_orchestrator.py`
+**Business Logic Coverage**: High-level batch execution coordination and concurrent task management. Creates scenario tasks, processes results with exception handling, and builds final batch summaries.
+
+### Scenario Processor
+**File**: `src/scenario_processor.py`
+**Business Logic Coverage**: Individual scenario processing with complete engine isolation. Handles conversation execution, evaluation coordination, and result formatting with proper error handling for different failure modes (timeout, API blocked, general failures).
+
+### Batch Progress Tracker
+**File**: `src/batch_progress_tracker.py`
+**Business Logic Coverage**: Simplified progress calculation and batch status updates. Tracks scenario completion with straightforward percentage-based progress reporting without complex sub-progress mechanisms.
+
+### Batch Resource Manager
+**File**: `src/batch_resource_manager.py`
+**Business Logic Coverage**: Concurrency control through asyncio semaphore management. Provides simple, thread-safe resource allocation for scenario processing limits without complex lazy initialization.
 
 ### Conversation Evaluator
 **File**: `src/evaluator.py`  
