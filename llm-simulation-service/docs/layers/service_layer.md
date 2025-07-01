@@ -59,6 +59,18 @@ Business logic for managing agent specifications and conversation configurations
 **File**: `src/scenario_variable_enricher.py`
 **Business Logic Coverage**: Handles scenario variable enrichment with webhook data integration and default value application. Provides pure functions for client data enrichment, case-insensitive variable mapping, and default value assignment without external dependencies.
 
+### Conversation Turn Manager
+**File**: `src/conversation_turn_manager.py`
+**Business Logic Coverage**: Executes individual conversation turns, validates agent responses and determines if the conversation should continue.
+
+### Conversation Error Handler
+**File**: `src/conversation_error_handler.py`
+**Business Logic Coverage**: Centralizes formatting for timeout, API blocked and general errors, logging context-aware information.
+
+### Conversation Loop Orchestrator
+**File**: `src/conversation_loop_orchestrator.py`
+**Business Logic Coverage**: Orchestrates the overall conversation loop, enforcing max turn and timeout constraints using the turn manager.
+
 ### Batch Processor
 **File**: `src/batch_processor.py`  
 **Business Logic Coverage**: Simplified batch job lifecycle management and coordination. Delegates complex orchestration logic to specialized service components while maintaining the public interface contract.
