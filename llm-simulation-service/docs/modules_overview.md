@@ -19,6 +19,12 @@ This document provides a comprehensive mapping of all source code modules to the
 | `src/speaker_display_name_resolver.py` | Service | Resolve speaker display names from prompt specs | [SpeakerDisplayNameResolver Contract](contracts/service_layer_contracts/speaker_display_name_resolver_contract.md) |
 | `src/tool_flush_state_machine.py` | Service | Match tool calls/results and flush to messages | [ToolFlushStateMachine Contract](contracts/service_layer_contracts/tool_flush_state_machine_contract.md) |
 | `src/dtos/parsed_message.py` | Service | DTO representing parsed AutoGen message | [ParsedMessage DTO](contracts/dto/parsed_message_dto.md) |
+| `src/conversation_context.py` | Service | Dataclass representing conversation state | N/A |
+| `src/turn_result.py` | Service | Dataclass representing single turn outcome | N/A |
+| `src/scenario_variable_enricher.py` | Service | Scenario variable enrichment helpers | [ScenarioVariableEnricher Contract](contracts/service_layer_contracts/scenario_variable_enricher_contract.md) |
+| `src/conversation_turn_manager.py` | Service | Execute conversation turns | [ConversationTurnManager Contract](contracts/service_layer_contracts/conversation_turn_manager_contract.md) |
+| `src/conversation_error_handler.py` | Service | Centralized error handling | [ConversationErrorHandler Contract](contracts/service_layer_contracts/conversation_error_handler_contract.md) |
+| `src/conversation_loop_orchestrator.py` | Service | Manage conversation loops | [ConversationLoopOrchestrator Contract](contracts/service_layer_contracts/conversation_loop_orchestrator_contract.md) |
 | `src/batch_processor.py` | Service | Parallel batch processing and workflow coordination | [Batch Processor Contract](contracts/service_layer_contracts/batch_processor_contract.md) |
 | `src/evaluator.py` | Service | Conversation scoring and quality assessment logic | [Evaluator Contract](contracts/service_layer_contracts/evaluator_contract.md) |
 | `src/prompt_specification.py` | Service | Agent configuration and prompt management logic | [Prompt Specification Contract](contracts/specification_contracts/prompt_specification_contract.md) |
@@ -48,7 +54,7 @@ This document provides a comprehensive mapping of all source code modules to the
 - Route handlers (`batch_routes.py`, `prompt_spec_routes.py`, `user.py`)
 - Application entry point (`main.py`)
 
-### Service Layer (10 modules)
+### Service Layer (14 modules)
 **Purpose**: Core business logic and workflow orchestration  
 **Characteristics**:
 - Pure business logic with no external system access

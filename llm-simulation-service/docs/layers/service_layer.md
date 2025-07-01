@@ -53,7 +53,23 @@ Business logic for managing agent specifications and conversation configurations
 
 ### Conversation Engine
 **File**: `src/autogen_conversation_engine.py`
-**Business Logic Coverage**: Implements the ConversationEngine contract using AutoGen's Swarm pattern with external user simulation and centralized client/tool factories.
+**Business Logic Coverage**: Implements the ConversationEngine contract using AutoGen's Swarm pattern with external user simulation and centralized client/tool factories. Delegates variable enrichment to ScenarioVariableEnricher service for separation of concerns.
+
+### Scenario Variable Enricher
+**File**: `src/scenario_variable_enricher.py`
+**Business Logic Coverage**: Handles scenario variable enrichment with webhook data integration and default value application. Provides pure functions for client data enrichment, case-insensitive variable mapping, and default value assignment without external dependencies.
+
+### Conversation Turn Manager
+**File**: `src/conversation_turn_manager.py`
+**Business Logic Coverage**: Executes individual conversation turns, validates agent responses and determines if the conversation should continue.
+
+### Conversation Error Handler
+**File**: `src/conversation_error_handler.py`
+**Business Logic Coverage**: Centralizes formatting for timeout, API blocked and general errors, logging context-aware information.
+
+### Conversation Loop Orchestrator
+**File**: `src/conversation_loop_orchestrator.py`
+**Business Logic Coverage**: Orchestrates the overall conversation loop, enforcing max turn and timeout constraints using the turn manager.
 
 ### Batch Processor
 **File**: `src/batch_processor.py`  
