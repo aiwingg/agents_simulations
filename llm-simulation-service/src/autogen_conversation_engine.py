@@ -238,23 +238,19 @@ class AutogenConversationEngine:
         variables = scenario.get("variables", {})
         seed = variables.get("SEED")
 
-        # Use webhook session_id if available, otherwise initialize a new session
-        webhook_session_id = None
-        client_id = variables.get("client_id")
-        if client_id:
-            # Get session_id from webhook if client_id is provided
-            client_data = await self.webhook_manager.get_client_data(client_id)
-            webhook_session_id = client_data.get("session_id")
+        # Enrich variables with client data first to fetch webhook session_id if available
+        variables, webhook_session_id = await self._enrich_variables_with_client_data(variables, "")
 
-        if webhook_session_id:
-            session_id = webhook_session_id
-            self.logger.log_info(f"Using session_id from webhook: {session_id}")
-        else:
+        # Decide on session ID after enrichment
+        if webhook_session_id is None:
             session_id = await self.webhook_manager.initialize_session()
             self.logger.log_info(f"Using generated session_id: {session_id}")
+        else:
+            session_id = webhook_session_id
+            self.logger.log_info(f"Using session_id from webhook: {session_id}")
 
-        # Enrich variables with client data and apply defaults
-        variables, _ = await self._enrich_variables_with_client_data(variables, session_id)
+        # Ensure variables contain the resolved session_id
+        variables["session_id"] = session_id
 
         # Format prompt specification with variables
         try:

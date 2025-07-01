@@ -283,6 +283,9 @@ class TestAutogenConversationEngine:
 
                 result = await self.engine.run_conversation_with_tools(scenario)
 
+            mock_enrich.assert_awaited_once_with(scenario["variables"], "")
+            self.engine.webhook_manager.initialize_session.assert_awaited_once()
+
             # Verify all components were called correctly
             mock_create_client.assert_called_once()
             mock_tool_factory_class.assert_called_once_with("test_session_123")
@@ -343,6 +346,9 @@ class TestAutogenConversationEngine:
 
                 result = await self.engine.run_conversation_with_tools(scenario, timeout_sec=10)
 
+            mock_enrich.assert_awaited_once_with(scenario["variables"], "")
+            self.engine.webhook_manager.initialize_session.assert_awaited_once()
+
             # Verify timeout result
             assert result["status"] == "timeout"
             assert result["error_type"] == "TimeoutError"
@@ -370,6 +376,9 @@ class TestAutogenConversationEngine:
 
                 result = await self.engine.run_conversation_with_tools(scenario)
 
+            mock_enrich.assert_awaited_once_with(scenario["variables"], "")
+            self.engine.webhook_manager.initialize_session.assert_awaited_once()
+
             # Verify graceful degradation
             assert result["status"] == "failed_api_blocked"
             assert result["error"] == "OpenAI API blocked due to geographic restrictions"
@@ -396,6 +405,9 @@ class TestAutogenConversationEngine:
                 )
 
                 result = await self.engine.run_conversation_with_tools(scenario)
+
+            mock_enrich.assert_awaited_once_with(scenario["variables"], "")
+            self.engine.webhook_manager.initialize_session.assert_awaited_once()
 
             # Verify error result
             assert result["status"] == "failed"
@@ -467,6 +479,9 @@ class TestAutogenConversationEngine:
                 )
 
                 result = await self.engine.run_conversation_with_tools(scenario)
+
+            mock_enrich.assert_awaited_once_with(scenario["variables"], "")
+            self.engine.webhook_manager.initialize_session.assert_not_awaited()
 
             # Verify webhook session_id was used
             mock_tool_factory_class.assert_called_once_with("webhook_session_456")
