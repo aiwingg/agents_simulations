@@ -6,11 +6,10 @@ Replaces the existing ConversationEngine with multi-agent orchestration capabili
 
 import asyncio
 import time
-from typing import Dict, List, Any, Optional, Tuple
+from typing import Dict, Any, Optional, Tuple
 from datetime import datetime
 
 # AutoGen imports
-from autogen_agentchat.teams import Swarm
 from autogen_agentchat.messages import HandoffMessage, TextMessage
 from autogen_agentchat.agents import AssistantAgent
 from autogen_agentchat.base import TaskResult
@@ -19,6 +18,8 @@ from autogen_agentchat.base import TaskResult
 from src.openai_wrapper import OpenAIWrapper
 from src.webhook_manager import WebhookManager
 from src.logging_utils import get_logger
+from src.conversation_context import ConversationContext
+from src.conversation_error_handler import ConversationErrorHandler
 from src.prompt_specification import PromptSpecificationManager, SystemPromptSpecification
 from src.config import Config
 
@@ -52,6 +53,7 @@ class AutogenConversationEngine:
         self.openai = openai_wrapper
         self.webhook_manager = WebhookManager()
         self.logger = get_logger()
+        self.error_handler = ConversationErrorHandler(self.logger)
         self.prompt_spec_name = prompt_spec_name
         self.turn_manager = ConversationTurnManager(self.logger)
 
@@ -99,7 +101,7 @@ class AutogenConversationEngine:
             `docs/contracts/dto/conversation_history_item.md`.
         """
         self.logger.log_info(
-            f"Running basic conversation via AutoGen Swarm",
+            "Running basic conversation via AutoGen Swarm",
             extra_data={
                 "scenario": scenario.get("name", "unknown"),
                 "max_turns": max_turns,
@@ -163,7 +165,6 @@ class AutogenConversationEngine:
 
         scenario_name = scenario.get("name", "unknown")
         variables = scenario.get("variables", {})
-        seed = variables.get("SEED")
 
         # Use webhook session_id if available, otherwise initialize a new session
         webhook_session_id = None
@@ -187,7 +188,7 @@ class AutogenConversationEngine:
         try:
             formatted_spec = self.prompt_specification.format_with_variables(variables)
             self.logger.log_info(
-                f"Successfully formatted prompt specification",
+                "Successfully formatted prompt specification",
                 extra_data={"session_id": session_id, "agents_formatted": list(formatted_spec.agents.keys())},
             )
         except Exception as e:
@@ -202,7 +203,7 @@ class AutogenConversationEngine:
             raise
 
         self.logger.log_info(
-            f"Starting AutoGen conversation simulation with tools",
+            "Starting AutoGen conversation simulation with tools",
             extra_data={
                 "session_id": session_id,
                 "scenario": scenario_name,
@@ -257,7 +258,7 @@ class AutogenConversationEngine:
                 initial_task = variables["GREETING"]
 
             self.logger.log_info(
-                f"Starting AutoGen conversation loop",
+                "Starting AutoGen conversation loop",
                 extra_data={
                     "session_id": session_id,
                     "initial_task": initial_task,
@@ -268,191 +269,97 @@ class AutogenConversationEngine:
             )
 
             # Conversation loop with timeout for entire conversation
-            try:
-                conversation_start = time.time()
-                current_user_message = initial_task
-                last_active_agent = "agent"
+            conversation_start = time.time()
+            current_user_message = initial_task
+            last_active_agent = "agent"
 
-                while context.turn_count < max_turns:
-                    if time.time() - conversation_start > timeout_sec:
-                        raise asyncio.TimeoutError(f"Conversation timeout after {timeout_sec} seconds")
+            while context.turn_count < max_turns:
+                if time.time() - conversation_start > timeout_sec:
+                    raise asyncio.TimeoutError(f"Conversation timeout after {timeout_sec} seconds")
 
-                    try:
-                        turn_result = await self.turn_manager.execute_turn(
-                            swarm, current_user_message, last_active_agent, context
-                        )
-                    except TypeError as exc:
-                        end_time = time.time()
-                        duration = end_time - start_time
-                        task_result = getattr(exc, "task_result", None)
-                        history = ConversationAdapter.extract_conversation_history(
-                            context.all_messages, self.prompt_specification
-                        )
-                        return {
-                            "session_id": session_id,
-                            "scenario": scenario_name,
-                            "status": "failed",
-                            "error": str(exc),
-                            "error_type": "NonTextMessageError",
-                            "total_turns": context.turn_count,
-                            "duration_seconds": duration,
-                            "tools_used": True,
-                            "conversation_history": history,
-                            "start_time": datetime.fromtimestamp(start_time).isoformat(),
-                            "end_time": datetime.fromtimestamp(end_time).isoformat(),
-                            "mas_stop_reason": getattr(task_result, "stop_reason", None),
-                            "mas_message_count": len(getattr(task_result, "messages", [])),
-                        }
-
-                    last_active_agent = turn_result.last_message.source
-
-                    if not turn_result.should_continue:
-                        break
-
-                    current_user_message = await self.turn_manager.generate_user_response(
-                        user_agent, turn_result.last_message
+                try:
+                    turn_result = await self.turn_manager.execute_turn(
+                        swarm, current_user_message, last_active_agent, context
                     )
-                    context.all_messages.append(TextMessage(content=current_user_message, source="client"))
-                    self.logger.log_info(
-                        "User simulation agent generated response",
-                        extra_data={"session_id": session_id, "user_response": current_user_message[:100]},
+                except TypeError as exc:
+                    end_time = time.time()
+                    duration = end_time - start_time
+                    task_result = getattr(exc, "task_result", None)
+                    history = ConversationAdapter.extract_conversation_history(
+                        context.all_messages, self.prompt_specification
                     )
-
-                end_time = time.time()
-                duration = end_time - start_time
-
-                self.logger.log_info(
-                    f"AutoGen conversation loop completed",
-                    extra_data={
+                    return {
                         "session_id": session_id,
-                        "duration": duration,
+                        "scenario": scenario_name,
+                        "status": "failed",
+                        "error": str(exc),
+                        "error_type": "NonTextMessageError",
                         "total_turns": context.turn_count,
-                        "messages_count": len(context.all_messages),
-                    },
+                        "duration_seconds": duration,
+                        "tools_used": True,
+                        "conversation_history": history,
+                        "start_time": datetime.fromtimestamp(start_time).isoformat(),
+                        "end_time": datetime.fromtimestamp(end_time).isoformat(),
+                        "mas_stop_reason": getattr(task_result, "stop_reason", None),
+                        "mas_message_count": len(getattr(task_result, "messages", [])),
+                    }
+
+                last_active_agent = turn_result.last_message.source
+
+                if not turn_result.should_continue:
+                    break
+
+                current_user_message = await self.turn_manager.generate_user_response(
+                    user_agent, turn_result.last_message
+                )
+                context.all_messages.append(TextMessage(content=current_user_message, source="client"))
+                self.logger.log_info(
+                    "User simulation agent generated response",
+                    extra_data={"session_id": session_id, "user_response": current_user_message[:100]},
                 )
 
-                # Create a synthetic TaskResult for ConversationAdapter
-                synthetic_result = TaskResult(
-                    messages=context.all_messages,
-                    stop_reason=f"completed_{context.turn_count}_turns",
-                )
-
-                # Convert to contract format using ConversationAdapter
-                result = ConversationAdapter.autogen_to_contract_format(
-                    task_result=synthetic_result,
-                    session_id=session_id,
-                    scenario_name=scenario_name,
-                    duration=duration,
-                    start_time=start_time,
-                    prompt_spec=self.prompt_specification,
-                )
-
-                # Log conversation completion
-                self.logger.log_conversation_complete(
-                    session_id=session_id,
-                    total_turns=result.get("total_turns", 0),
-                    status=result.get("status", "completed"),
-                )
-
-                return result
-
-            except asyncio.TimeoutError:
-                end_time = time.time()
-                duration = end_time - start_time
-
-                self.logger.log_error(
-                    f"AutoGen conversation timeout after {timeout_sec} seconds",
-                    extra_data={
-                        "session_id": session_id,
-                        "timeout_sec": timeout_sec,
-                        "actual_duration": duration,
-                        "scenario_name": scenario_name,
-                        "completed_turns": context.turn_count,
-                    },
-                )
-
-                history = ConversationAdapter.extract_conversation_history(
-                    context.all_messages, self.prompt_specification
-                )
-
-                # Return timeout result in contract format
-                return {
-                    "session_id": session_id,
-                    "scenario": scenario_name,
-                    "status": "timeout",
-                    "error": f"Conversation timeout after {timeout_sec} seconds",
-                    "error_type": "TimeoutError",
-                    "total_turns": context.turn_count,
-                    "duration_seconds": duration,
-                    "conversation_history": history,
-                    "start_time": datetime.fromtimestamp(start_time).isoformat(),
-                    "end_time": datetime.fromtimestamp(end_time).isoformat(),
-                    "tools_used": True,
-                }
-
-        except Exception as e:
             end_time = time.time()
-            duration = end_time - start_time
+            duration = end_time - context.start_time
 
-            # Enhanced error logging with more context
-            error_context = {
-                "session_id": session_id,
-                "scenario_name": scenario_name,
-                "duration_so_far": duration,
-                "max_turns": max_turns,
-                "timeout_sec": timeout_sec,
-                "completed_turns": context.turn_count,
-                "error_type": type(e).__name__,
-                "spec_name": self.prompt_spec_name,
-            }
-
-            # Check if this is a geographic restriction or persistent OpenAI API failure
-            error_message = str(e).lower()
-            is_api_blocked = (
-                "geographic restriction" in error_message
-                or "unsupported_country_region_territory" in error_message
-                or "blocked due to geographic" in error_message
+            self.logger.log_info(
+                "AutoGen conversation loop completed",
+                extra_data={
+                    "session_id": session_id,
+                    "duration": duration,
+                    "total_turns": context.turn_count,
+                    "messages_count": len(context.all_messages),
+                },
             )
 
-            if is_api_blocked:
-                self.logger.log_error(
-                    f"OpenAI API blocked in AutoGen engine - attempting graceful degradation: {str(e)}",
-                    exception=e,
-                    extra_data=error_context,
-                )
+            # Create a synthetic TaskResult for ConversationAdapter
+            synthetic_result = TaskResult(
+                messages=context.all_messages,
+                stop_reason=f"completed_{context.turn_count}_turns",
+            )
 
-                # Return a graceful failure with some useful information
-                return {
-                    "session_id": session_id,
-                    "scenario": scenario_name,
-                    "status": "failed_api_blocked",
-                    "error": "OpenAI API blocked due to geographic restrictions",
-                    "error_type": "APIBlockedError",
-                    "total_turns": context.turn_count,
-                    "duration_seconds": duration,
-                    "tools_used": True,
-                    "conversation_history": [],
-                    "start_time": datetime.fromtimestamp(start_time).isoformat(),
-                    "end_time": datetime.fromtimestamp(end_time).isoformat(),
-                    "graceful_degradation": True,
-                    "partial_completion": context.turn_count > 0,
-                }
-            else:
-                self.logger.log_error(
-                    f"AutoGen conversation with tools failed: {str(e)}", exception=e, extra_data=error_context
-                )
+            # Convert to contract format using ConversationAdapter
+            result = ConversationAdapter.autogen_to_contract_format(
+                task_result=synthetic_result,
+                session_id=session_id,
+                scenario_name=scenario_name,
+                duration=duration,
+                start_time=context.start_time,
+                prompt_spec=self.prompt_specification,
+            )
 
-            return {
-                "session_id": session_id,
-                "scenario": scenario_name,
-                "status": "failed",
-                "error": str(e),
-                "error_type": type(e).__name__,
-                "total_turns": context.turn_count,
-                "duration_seconds": duration,
-                "tools_used": True,
-                "conversation_history": [],
-                "start_time": datetime.fromtimestamp(start_time).isoformat(),
-                "end_time": datetime.fromtimestamp(end_time).isoformat(),
-                "error_context": error_context,
-            }
+            # Log conversation completion
+            self.logger.log_conversation_complete(
+                session_id=session_id,
+                total_turns=result.get("total_turns", 0),
+                status=result.get("status", "completed"),
+            )
+
+            return result
+
+        except Exception as e:
+            return self.error_handler.handle_error_by_type(
+                error=e,
+                context=context,
+                scenario_name=scenario_name,
+                spec_name=self.prompt_spec_name,
+            )
