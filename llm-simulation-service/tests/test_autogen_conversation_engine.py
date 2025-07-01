@@ -12,6 +12,9 @@ from src.openai_wrapper import OpenAIWrapper
 from src.prompt_specification import SystemPromptSpecification, AgentPromptSpecification
 
 
+# TODO: tests here are heavily mocked. I carried out a large refactor of the engine, but tests are not updated.
+# We should update them to use the new engine architecture to reduce the amount of mocking.
+
 class TestAutogenConversationEngine:
     """Test AutogenConversationEngine functionality"""
 
