@@ -1,55 +1,67 @@
 {
-  "name": "File-based Multi-Agent System",
+  "name": "VTD multiagent v1.0.0",
   "version": "1.0.0",
   "description": "Multi-agent configuration using file references for prompts",
   "agents": {
     "agent": {
-      "name": "Entry Point",
-      "prompt": "file:entry_point_system.txt",
+      "name": "ENTRY",
+      "prompt": "file:ENTRY.txt",
       "tools": [
         "change_delivery_date",
         "set_current_location"
       ],
-      "description": "Entry point for the conversation",
+      "description": "",
       "handoffs": {
-        "flow_manager": "Transfer the conversation to a flow manager once you have all the information you need"
+        "CART_MANAGMENT": "Use as soon as the customer wants to add a new product (“Нужна куриная грудка”), search the catalogue (“Есть ли у вас индейка?”), remove / change quantity of an item, clarify packaging or weight"
       }
     },
-    "flow_manager": {
-      "name": "Flow Manager",
-      "prompt": "file:flow_manager.txt",
+    "CONSULTATION": {
+      "name": "CONSULTATION",
+      "prompt": "file:CONSULTATION.txt",
+      "tools": [
+        "change_delivery_date",
+        "get_cart"
+      ],
+      "description": "",
+      "handoffs": {
+        "CART_MANAGMENT": "Use as soon as the customer wants to add a new product (“Нужна куриная грудка”), search the catalogue (“Есть ли у вас индейка?”), remove / change quantity of an item, clarify packaging or weight"
+      }
+    },
+    "CART_MANAGMENT": {
+      "name": "CART_MANAGMENT",
+      "prompt": "file:CART_MANAGMENT.txt",
+      "tools": [
+        "rag_find_products",
+        "add_to_cart",
+        "remove_from_cart"
+      ],
+      "description": "",
+      "handoffs": {
+        "CONSULTATION": "Use when the topic shifts to delivery details or order overview, e.g. customer asks to change the delivery date or address, customer asks “Что у меня сейчас в заказе?”, Cart-manager has just added items and the customer now wants to adjust schedule/ location",
+        "CONFIRMATION": "Use when all requested products are already in the cart, only cart, address, and schedule need a last check, customer signals “That’s everything for now.”"
+      }
+    },
+    "CONFIRMATION": {
+      "name": "CONFIRMATION",
+      "prompt": "file:CONFIRMATION.txt",
+      "tools": [
+        "get_cart"
+      ],
+      "description": "",
+      "handoffs": {
+        "CART_MANAGMENT": "Use as soon as the customer wants to add a new product (“Нужна куриная грудка”), search the catalogue (“Есть ли у вас индейка?”), remove / change quantity of an item, clarify packaging or weight",
+        "CONSULTANT": "Use when the topic shifts to delivery details or order overview, e.g. customer asks to change the delivery date or address, customer asks “Что у меня сейчас в заказе?”, Cart-manager has just added items and the customer now wants to adjust schedule/ location"
+      }
+    },
+    "GOODBYE": {
+      "name": "GOODBYE",
+      "prompt": "file:GOODBYE.txt",
       "tools": [
         "add_to_cart",
-        "remove_from_cart",
-        "get_cart",
-        "change_delivery_date",
-        "set_current_location"
+        "end_call"
       ],
-      "description": "Flow manager for the conversation",
-      "handoffs": {
-        "nomenclature_lookup": "Transfer the conversation to nomenclature lookup if client shows intent to add products to the cart",
-        "confirmation": "Transfer the conversation to confirmation if client added products to the cart and you made attempt to upsell"
-      }
-    },
-    "nomenclature_lookup": {
-      "name": "Nomenclature Lookup",
-      "prompt": "file:nomenclature_lookup_system.txt",
-      "tools": [
-        "rag_find_products"
-      ],
-      "description": "Nomenclature lookup for the conversation",
-      "handoffs": {
-        "flow_manager": "Transfer the conversation to a flow manager once you have all the information you need"
-      }
-    },
-    "confirmation": {
-      "name": "Confirmation",
-      "prompt": "file:confirmation_system.txt",
-      "tools": [],
-      "description": "Confirmation for the conversation",
-      "handoffs": {
-        "flow_manager": "Transfer the conversation to a flow manager if client want to change something in the order, with reason to do so"
-      }
+      "description": "",
+      "handoffs": {}
     },
     "client": {
       "name": "Customer",
