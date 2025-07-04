@@ -57,7 +57,7 @@ Business logic for managing agent specifications and conversation configurations
 
 ### Scenario Variable Enricher
 **File**: `src/scenario_variable_enricher.py`
-**Business Logic Coverage**: Handles scenario variable enrichment with webhook data integration and default value application. Provides pure functions for client data enrichment, case-insensitive variable mapping, and default value assignment without external dependencies.
+**Business Logic Coverage**: Handles scenario variable enrichment by integrating with the `WebhookManager`. It passes scenario-specific data (like purchase history) to the webhook for enrichment and applies default values. This component provides pure functions for these tasks, ensuring no direct external dependencies.
 
 ### Conversation Turn Manager
 **File**: `src/conversation_turn_manager.py`

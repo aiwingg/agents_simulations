@@ -35,18 +35,21 @@ class WebhookManager:
         client_data = await self.get_client_data(client_id)
         return client_data["variables"]
 
-    async def get_client_data(self, client_id: str) -> Dict[str, Any]:
+    async def get_client_data(self, client_id: str, purchase_history_codes: Optional[list] = None) -> Dict[str, Any]:
         """
         Retrieve client data including variables and session_id from the RAG webhook
 
         Args:
             client_id: The client ID to fetch data for
+            purchase_history_codes: List of purchase history codes from the scenario
 
         Returns:
             Dictionary containing 'variables' and 'session_id'
         """
         try:
             payload = {"call_inbound": {"from_number": client_id}}
+            if purchase_history_codes:
+                payload["injected_purchase_history"] = purchase_history_codes
 
             self.logger.log_info(f"Fetching client data for client_id: {client_id}")
 

@@ -28,7 +28,8 @@ async def enrich_scenario_variables(
     if client_id:
         logger.log_info(f"Found client_id in scenario: {client_id}")
         try:
-            client_data = await webhook_manager.get_client_data(client_id)
+            purchase_history_codes = variables.get("scenario_purchase_history")
+            client_data = await webhook_manager.get_client_data(client_id, purchase_history_codes)
             webhook_session_id = client_data.get("session_id")
             variables.update(client_data.get("variables", {}))
         except Exception as exc:  # pragma: no cover - network failure

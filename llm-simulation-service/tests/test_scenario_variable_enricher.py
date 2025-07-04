@@ -114,9 +114,20 @@ class TestScenarioVariableEnricher:
         result, session = await enrich_scenario_variables(
             variables, "sid", webhook_manager, logger
         )
-        webhook_manager.get_client_data.assert_awaited_once_with("c1")
+        webhook_manager.get_client_data.assert_awaited_once_with("c1", None)
         assert session == "s1"
         assert result["name"] == "Alice"
+
+    @pytest.mark.asyncio
+    async def test_enrich_with_scenario_purchase_history(self):
+        variables = {"client_id": "c1", "scenario_purchase_history": ["p1", "p2"]}
+        webhook_manager = Mock(spec=WebhookManager)
+        webhook_manager.get_client_data = AsyncMock(
+            return_value={"variables": {}, "session_id": None}
+        )
+        logger = Mock(spec=SimulationLogger)
+        await enrich_scenario_variables(variables, "sid", webhook_manager, logger)
+        webhook_manager.get_client_data.assert_awaited_once_with("c1", ["p1", "p2"])
 
     @pytest.mark.asyncio
     async def test_fetch_client_data_no_client_id(self):
