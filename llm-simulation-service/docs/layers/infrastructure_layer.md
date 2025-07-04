@@ -57,7 +57,7 @@ The Infrastructure Layer provides all external system integrations and technical
 **Adapts**: External webhook APIs for client data retrieval and session management  
 **Infrastructure Concerns**:
 - HTTP client configuration and connection management
-- External webhook API integration
+- External webhook API integration, with support for injecting scenario-specific data
 - Session ID generation and tracking
 - Client data transformation and mapping
 - Network error handling and timeouts
