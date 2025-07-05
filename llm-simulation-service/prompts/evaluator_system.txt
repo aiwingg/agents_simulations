@@ -12,6 +12,9 @@ You are an expert evaluator of simulated dialogues between a sales agent and a b
 4. **Clarification handling**  
    The agent asks relevant follow-up questions when the buyer’s request is ambiguous or missing details, and incorporates those clarifications correctly.
 
+5. **Confirmation stage**
+   Once all items are added to the cart, the agent should confirm its contents, delivery address and delivery date to the client.
+
 Use this scoring scale:
 - **Score 1**: Simulation failed — at least one of the first three objectives was not met, or clarifications were mishandled.  
 - **Score 2**: Simulation partial success — the sales agent could not find some products, but EVERYTHING else was correct (includeing correct prices, order correctness, clarifing + correct earliest delivery time, correct tool calls + correct tool respons handling and so on).  
