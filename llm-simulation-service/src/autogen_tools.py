@@ -66,6 +66,10 @@ class CallTransferArgs(BaseModel):
     reason: Annotated[str, "Reason for transferring the call"]
 
 
+class EndCallArgs(BaseModel):
+    reason: Annotated[str, "Reason for ending the call"] = "User decided to end the conversation"
+
+
 class JsonOutput(BaseModel):
     """Generic JSON string output"""
 
@@ -234,6 +238,27 @@ class CallTransferTool(SessionAwareTool):
             return json.dumps({"error": str(e)}, ensure_ascii=False)
 
 
+class EndCallTool(SessionAwareTool):
+    """Tool for ending the conversation by user agent"""
+
+    def __init__(self, session_id: str):
+        super().__init__(
+            session_id=session_id,
+            name="end_call",
+            description="End the conversation when user decides to terminate",
+            args_type=EndCallArgs,
+        )
+
+    async def run(self, args: EndCallArgs, cancellation_token: CancellationToken) -> str:
+        """End the conversation"""
+        try:
+            # This tool doesn't need to call an external service, it just signals termination
+            logger.log_info(f"end_call called for session {self.session_id}")
+        except Exception as e:
+            logger.log_error(f"end_call failed: {e}")
+            return json.dumps({"error": str(e)}, ensure_ascii=False)
+
+
 class AutogenToolFactory:
     """
     Factory for creating session-isolated Autogen Tool instances
@@ -256,6 +281,7 @@ class AutogenToolFactory:
             "change_delivery_date": ChangeDeliveryDateTool,
             "set_current_location": SetCurrentLocationTool,
             "call_transfer": CallTransferTool,
+            "end_call": EndCallTool,
         }
 
         tools = []
