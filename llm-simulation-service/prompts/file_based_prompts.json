@@ -16,8 +16,8 @@
       }
     },
     "CONSULTATION": {
-      "name": "CONSULTATION",
-      "prompt": "file:CONSULTATION.txt",
+      "name": "CONSULTANT",
+      "prompt": "file:CONSULTANT.txt",
       "tools": [
         "change_delivery_date",
         "get_cart"
