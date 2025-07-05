@@ -174,7 +174,7 @@ The Presentation Layer handles all external interactions with the LLM Simulation
     "client": {
       "name": "string",
       "prompt": "string (or file:filename.txt)",
-      "tools": ["end_call"],
+              "tools": [],
       "description": "string"
     },
     "evaluator": {

@@ -46,7 +46,7 @@ def test_prompt_specification_manager():
                 "client": {
                     "name": "Test Client",
                     "prompt": "You are a test client.",
-                    "tools": ["end_call"],
+                    "tools": [],
                     "description": "Client for testing"
                 },
                 "evaluator": {
