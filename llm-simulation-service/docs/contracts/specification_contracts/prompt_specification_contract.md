@@ -33,7 +33,7 @@ Dataclass containing overall configuration with fields `name`, `version`, `descr
   "description": "string",
   "agents": {
     "agent": {"name": "str", "prompt": "str or file:path", "tools": ["str"], "description": "str", "handoffs": {"target_agent": "str"}},
-    "client": {"name": "str", "prompt": "str or file:path", "tools": ["end_call"]},
+    "client": {"name": "str", "prompt": "str or file:path", "tools": []},
     "evaluator": {"name": "str", "prompt": "str or file:path", "tools": []}
   }
 }

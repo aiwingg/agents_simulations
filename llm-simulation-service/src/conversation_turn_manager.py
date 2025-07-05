@@ -54,10 +54,10 @@ class ConversationTurnManager:
 
     async def generate_user_response(
         self, user_agent: AssistantAgent, agent_message: TextMessage
-    ) -> str:
+    ) -> TaskResult:
         """Generate the next user message via user simulation agent."""
-        response = await user_agent.on_messages([agent_message], None)
-        return response.chat_message.content
+        task_result = await user_agent.run(task=agent_message.content)
+        return task_result
 
     def _validate_agent_response(
         self, task_result: TaskResult, context: ConversationContext

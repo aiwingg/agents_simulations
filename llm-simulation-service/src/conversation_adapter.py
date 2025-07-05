@@ -186,14 +186,14 @@ class ConversationAdapter:
             last_entry = conversation_history[-1]
             content = last_entry.get("content", "").lower()
 
-            # Check for call end indicators
-            if any(phrase in content for phrase in ["end_call", "завершил звонок", "call ended"]):
+            # Check for conversation completion phrases
+            if any(phrase in content for phrase in ["завершил звонок", "call ended"]):
                 return "completed"
 
             # Check for tool calls that indicate completion
             if last_entry.get("tool_calls"):
                 for tool_call in last_entry["tool_calls"]:
-                    if tool_call.get("function", {}).get("name") == "end_call":
+                    if tool_call.get("function", {}).get("name") == "call_transfer":
                         return "completed"
 
         # Default to completed for normal termination
