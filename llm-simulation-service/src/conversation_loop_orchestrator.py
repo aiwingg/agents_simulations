@@ -81,7 +81,7 @@ class ConversationLoopOrchestrator:
         last_user_message = user_task_result.messages[-1]
         
         # Always add user agent messages to conversation history
-        context.all_messages.extend(user_task_result.messages)
+        context.all_messages.extend(user_task_result.messages[1:])
         
         # Check if user agent made tool calls (indicating intent to end simulation)
         if isinstance(last_user_message, (ToolCallRequestEvent, ToolCallExecutionEvent)):

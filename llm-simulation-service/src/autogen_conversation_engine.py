@@ -144,7 +144,7 @@ class AutogenConversationEngine:
         user_tools = tool_factory.get_tools_for_agent(["end_call"])
 
         user_agent = AssistantAgent(
-            name="user_agent", 
+            name="client", 
             model_client=model_client, 
             system_message=client_agent_spec.prompt,
             tools=user_tools,
