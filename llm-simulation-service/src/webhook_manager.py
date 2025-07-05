@@ -20,7 +20,6 @@ class WebhookManager:
     def __init__(self):
         self.logger = get_logger()
         self.webhook_url = Config.WEBHOOK_URL
-        self.rag_webhook_url = "https://aiwingg.com/rag/webhook"
 
     async def get_client_variables(self, client_id: str) -> Dict[str, str]:
         """
@@ -54,7 +53,7 @@ class WebhookManager:
             self.logger.log_info(f"Fetching client data for client_id: {client_id}")
 
             async with aiohttp.ClientSession() as session:
-                async with session.post(self.rag_webhook_url, json=payload, timeout=30, ssl=ssl_context) as response:
+                async with session.post(self.webhook_url, json=payload, timeout=30, ssl=ssl_context) as response:
                     if response.status == 200:
                         data = await response.json()
 
@@ -70,20 +69,20 @@ class WebhookManager:
 
                         # Map the response variables to our expected format
                         client_variables = {
-                            "LOCATIONS": dynamic_variables.get("locations", ""),
-                            "DELIVERY_DAYS": dynamic_variables.get("delivery_days", ""),
-                            "PURCHASE_HISTORY": dynamic_variables.get("purchase_history", ""),
-                            "NAME": dynamic_variables.get("name", ""),
-                            "CURRENT_DATE": dynamic_variables.get("current_date", ""),
+                            "locations": dynamic_variables.get("locations", ""),
+                            "delivery_days": dynamic_variables.get("delivery_days", ""),
+                            "purchase_history": dynamic_variables.get("purchase_history", ""),
+                            "name": dynamic_variables.get("name", ""),
+                            "current_date": dynamic_variables.get("current_date", ""),
                         }
 
                         self.logger.log_info(
                             f"Successfully retrieved client data",
                             extra_data={
                                 "client_id": client_id,
-                                "has_location": bool(client_variables["LOCATIONS"]),
-                                "has_delivery_days": bool(client_variables["DELIVERY_DAYS"]),
-                                "has_purchase_history": bool(client_variables["PURCHASE_HISTORY"]),
+                                "has_location": bool(client_variables["locations"]),
+                                "has_delivery_days": bool(client_variables["delivery_days"]),
+                                "has_purchase_history": bool(client_variables["purchase_history"]),
                                 "has_session_id": bool(webhook_session_id),
                             },
                         )
