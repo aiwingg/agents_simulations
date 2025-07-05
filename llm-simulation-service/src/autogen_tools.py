@@ -67,7 +67,7 @@ class CallTransferArgs(BaseModel):
 
 
 class EndCallArgs(BaseModel):
-    reason: Annotated[str, "Reason for ending the call"] = "User decided to end the conversation"
+    reason: Annotated[str, "Reason for ending the call"]
 
 
 class JsonOutput(BaseModel):
@@ -239,21 +239,18 @@ class CallTransferTool(SessionAwareTool):
 
 
 class EndCallTool(SessionAwareTool):
-    """Tool for ending the conversation by user agent"""
+    """Tool for ending call with session isolation"""
 
     def __init__(self, session_id: str):
         super().__init__(
-            session_id=session_id,
-            name="end_call",
-            description="End the conversation when user decides to terminate",
-            args_type=EndCallArgs,
+            session_id=session_id, name="end_call", description="End the conversation", args_type=EndCallArgs
         )
 
     async def run(self, args: EndCallArgs, cancellation_token: CancellationToken) -> str:
         """End the conversation"""
         try:
-            # This tool doesn't need to call an external service, it just signals termination
-            logger.log_info(f"end_call called for session {self.session_id}")
+            result = await tool_emulator.call_tool("end_call", {"reason": args.reason}, session_id=self.session_id)
+            return json.dumps(result, ensure_ascii=False)
         except Exception as e:
             logger.log_error(f"end_call failed: {e}")
             return json.dumps({"error": str(e)}, ensure_ascii=False)

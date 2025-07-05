@@ -30,7 +30,7 @@ You can use the following tools:
 
 - `call_transfer`: Use function call_transfer to navigate to operator or human agent.
 
-
+- `end_call`: use to end the call. Only end the call when you are sure that you have completed the task.
 
 - `set_current_location`: use this tool to specify where the order should be delivered if the client has multiple addresses. 
 

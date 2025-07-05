@@ -433,7 +433,7 @@ class PromptSpecificationManager:
                 "client": AgentPromptSpecification(
                     name="Customer",
                     prompt=client_prompt,
-                    tools=[],
+                    tools=["end_call"],
                     description="Customer calling to place an order",
                 ),
                 "evaluator": AgentPromptSpecification(

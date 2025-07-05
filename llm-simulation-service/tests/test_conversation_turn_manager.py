@@ -56,13 +56,11 @@ class TestConversationTurnManager:
     async def test_generate_user_response_success(self, logger):
         manager = ConversationTurnManager(logger)
         agent = Mock()
-        expected_task_result = TaskResult(messages=[TextMessage(content="pong", source="user")], stop_reason=None)
-        agent.run = AsyncMock(return_value=expected_task_result)
+        agent.on_messages = AsyncMock(return_value=Mock(chat_message=TextMessage(content="pong", source="agent")))
 
         result = await manager.generate_user_response(agent, TextMessage(content="ping", source="agent"))
 
-        assert result == expected_task_result
-        agent.run.assert_called_once_with(task="ping")
+        assert result == "pong"
 
     def test_validate_agent_response_text_message(self, context, logger):
         manager = ConversationTurnManager(logger)

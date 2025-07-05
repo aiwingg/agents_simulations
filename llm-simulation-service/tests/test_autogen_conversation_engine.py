@@ -32,7 +32,7 @@ class TestAutogenConversationEngine:
         )
 
         self.mock_client_spec = AgentPromptSpecification(
-            name="client", prompt="You are a test client: {{ name }}", tools=[], description="Test client"
+            name="client", prompt="You are a test client: {{ name }}", tools=["end_call"], description="Test client"
         )
 
         self.mock_system_prompt_spec = SystemPromptSpecification(

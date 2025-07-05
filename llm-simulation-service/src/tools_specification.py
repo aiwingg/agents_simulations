@@ -156,12 +156,22 @@ class ToolsSpecification:
             "type": "function",
             "function": {
                 "name": "call_transfer",
-                "description": "Transfer call to human operator",
+                "description": "Transfer the call to a human operator",
                 "parameters": {
                     "type": "object",
-                    "properties": {
-                        "reason": {"type": "string", "description": "Reason for transferring the call"}
-                    },
+                    "properties": {"reason": {"type": "string", "description": "Reason for transferring the call"}},
+                    "required": ["reason"],
+                },
+            },
+        },
+        "end_call": {
+            "type": "function",
+            "function": {
+                "name": "end_call",
+                "description": "End the conversation",
+                "parameters": {
+                    "type": "object",
+                    "properties": {"reason": {"type": "string", "description": "Reason for ending the call"}},
                     "required": ["reason"],
                 },
             },

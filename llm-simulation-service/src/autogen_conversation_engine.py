@@ -121,14 +121,13 @@ class AutogenConversationEngine:
 
         return result
 
-    def _create_user_agent(self, model_client, formatted_spec: SystemPromptSpecification, session_id: str) -> AssistantAgent:
+    def _create_user_agent(self, model_client, formatted_spec: SystemPromptSpecification) -> AssistantAgent:
         """
         Create AssistantAgent for realistic user simulation using client agent from formatted spec.
 
         Args:
             model_client: OpenAI client for the user simulation agent
             formatted_spec: SystemPromptSpecification with formatted prompts
-            session_id: Session ID for tool isolation
 
         Returns:
             Configured AssistantAgent for user simulation
@@ -138,17 +137,8 @@ class AutogenConversationEngine:
         if not client_agent_spec:
             raise ValueError("No 'client' agent found in formatted specification for user simulation")
 
-        # Always add end_call tool to user agent for conversation termination
-        from src.autogen_tools import AutogenToolFactory
-        tool_factory = AutogenToolFactory(session_id)
-        user_tools = tool_factory.get_tools_for_agent(["end_call"])
-
         user_agent = AssistantAgent(
-            name="user_agent", 
-            model_client=model_client, 
-            system_message=client_agent_spec.prompt,
-            tools=user_tools,
-            reflect_on_tool_use=False
+            name="user_agent", model_client=model_client, system_message=client_agent_spec.prompt
         )
 
         return user_agent
@@ -180,7 +170,7 @@ class AutogenConversationEngine:
         try:
             spec = self.prompt_specification.format_with_variables(variables)
             model = AutogenModelClientFactory.create_from_openai_wrapper(self.openai)
-            user_agent = self._create_user_agent(model, spec, context.session_id)
+            user_agent = self._create_user_agent(model, spec)
             tool_names = {t for a in spec.agents.values() for t in a.tools}
             tools = AutogenToolFactory(context.session_id).get_tools_for_agent(list(tool_names))
             swarm = AutogenMASFactory(context.session_id).create_swarm_team(spec, tools, model)

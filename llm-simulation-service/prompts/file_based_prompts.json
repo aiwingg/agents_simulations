@@ -57,7 +57,8 @@
       "name": "GOODBYE",
       "prompt": "file:GOODBYE.txt",
       "tools": [
-        "add_to_cart"
+        "add_to_cart",
+        "end_call"
       ],
       "description": "",
       "handoffs": {}
@@ -65,7 +66,9 @@
     "client": {
       "name": "Customer",
       "prompt": "file:client_system.txt",
-      "tools": [],
+      "tools": [
+        "end_call"
+      ],
       "description": "Customer calling to place an order"
     },
     "evaluator": {
