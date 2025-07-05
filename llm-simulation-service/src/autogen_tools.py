@@ -25,8 +25,8 @@ class CartItem(BaseModel):
 
     product_code: str = Field(description="Код продукта из rag_find_products")
     quantity: float = Field(description="Количество продукта (шт, кг и т.п.)")
-    packaging_type: Optional[int] = Field(
-        description="Номер способа упаковки (опционально в случае нескольких способов)", default=None
+    packaging_type: int = Field(
+        description="Номер способа упаковки, если всего 1, то 1"
     )
 
 

@@ -37,6 +37,9 @@ async def enrich_scenario_variables(
     _create_lowercase_mappings(variables)
     variables["session_id"] = session_id
     _apply_default_values(variables)
+
+    logger.log_info(f"Enriched variables: {variables}")
+    
     return variables, webhook_session_id
 
 def _create_lowercase_mappings(variables: Dict[str, Any]) -> None:
