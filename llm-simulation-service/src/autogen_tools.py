@@ -66,10 +66,6 @@ class CallTransferArgs(BaseModel):
     reason: Annotated[str, "Reason for transferring the call"]
 
 
-class EndCallArgs(BaseModel):
-    reason: Annotated[str, "Reason for ending the call"]
-
-
 class JsonOutput(BaseModel):
     """Generic JSON string output"""
 
@@ -238,24 +234,6 @@ class CallTransferTool(SessionAwareTool):
             return json.dumps({"error": str(e)}, ensure_ascii=False)
 
 
-class EndCallTool(SessionAwareTool):
-    """Tool for ending call with session isolation"""
-
-    def __init__(self, session_id: str):
-        super().__init__(
-            session_id=session_id, name="end_call", description="End the conversation", args_type=EndCallArgs
-        )
-
-    async def run(self, args: EndCallArgs, cancellation_token: CancellationToken) -> str:
-        """End the conversation"""
-        try:
-            result = await tool_emulator.call_tool("end_call", {"reason": args.reason}, session_id=self.session_id)
-            return json.dumps(result, ensure_ascii=False)
-        except Exception as e:
-            logger.log_error(f"end_call failed: {e}")
-            return json.dumps({"error": str(e)}, ensure_ascii=False)
-
-
 class AutogenToolFactory:
     """
     Factory for creating session-isolated Autogen Tool instances
@@ -278,7 +256,6 @@ class AutogenToolFactory:
             "change_delivery_date": ChangeDeliveryDateTool,
             "set_current_location": SetCurrentLocationTool,
             "call_transfer": CallTransferTool,
-            "end_call": EndCallTool,
         }
 
         tools = []
