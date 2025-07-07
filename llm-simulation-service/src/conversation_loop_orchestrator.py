@@ -28,7 +28,7 @@ class ConversationLoopOrchestrator:
         context: ConversationContext,
     ) -> ConversationContext:
         current = initial_message
-        last_agent: Optional[str] = "agent"
+        last_agent: Optional[str] = "ENTRY"
         while context.turn_count < context.max_turns:
             self._check_conversation_timeout(context)
             turn = await self.turn_manager.execute_turn(swarm, current, last_agent, context)

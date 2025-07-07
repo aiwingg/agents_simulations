@@ -1,65 +1,143 @@
 {
-  "name": "VTD multiagent v1.0.0",
-  "version": "1.0.0",
-  "description": "Multi-agent configuration using file references for prompts",
+  "name": "VTD multiagent v1.1.0",
+  "version": "1.1.0",
+  "description": "Multi-agent configuration (Swarm-pattern) for ВТД ordering flow. Prompts are stored in external files so they can be iterated independently.",
   "agents": {
-    "agent": {
+    "ENTRY": {
       "name": "ENTRY",
       "prompt": "file:ENTRY.txt",
       "tools": [
         "change_delivery_date",
         "set_current_location"
       ],
-      "description": "",
+      "description": "Greets the caller, captures / updates delivery date and address, confirms them aloud.",
       "handoffs": {
-        "CART_MANAGMENT": "Use as soon as the customer wants to add a new product (“Нужна куриная грудка”), search the catalogue (“Есть ли у вас индейка?”), remove / change quantity of an item, clarify packaging or weight"
+        "INTENT_CLASSIFIER": "Invoke after both date and address are confirmed (whether at the very beginning or after a requested change)."
       }
     },
-    "CONSULTATION": {
-      "name": "CONSULTATION",
-      "prompt": "file:CONSULTATION.txt",
+
+    "INTENT_CLASSIFIER": {
+      "name": "INTENT_CLASSIFIER",
+      "prompt": "file:INTENT_CLASSIFIER.txt",
+      "tools": [],
+      "description": "Routes the conversation by analysing the caller’s last utterance; afterwards says a neutral helper phrase.",
+      "handoffs": {
+        "PRODUCT_SELECTOR": "Use when the caller wants to add a product, search the catalogue, or continue choosing goods.",
+        "CONFIRM_PRODUCT_FROM_CART": "Use when the caller wants to remove or change an item already present in the cart.",
+        "ENTRY": "Use when the caller wants to change delivery date or address.",
+        "CONFIRMATION_STAGE": "Use when the caller asks what is already in the order or signals they may be ready to finish.",
+        "GOODBYE": "Use when the caller explicitly ends the conversation after final confirmation."
+      }
+    },
+
+    "CONFIRM_PRODUCT_FROM_CART": {
+      "name": "CONFIRM_PRODUCT_FROM_CART",
+      "prompt": "file:CONFIRM_PRODUCT_FROM_CART.txt",
       "tools": [
-        "change_delivery_date",
         "get_cart"
       ],
-      "description": "",
+      "description": "Finds the exact SKU(s) the caller refers to (for removal / change); clarifies if ambiguous.",
       "handoffs": {
-        "CART_MANAGMENT": "Use as soon as the customer wants to add a new product (“Нужна куриная грудка”), search the catalogue (“Есть ли у вас индейка?”), remove / change quantity of an item, clarify packaging or weight"
+        "REMOVE_FROM_CART": "Use once a single SKU has been unambiguously identified and confirmed for removal.",
+        "INTENT_CLASSIFIER": "Use if no matching SKU is found or the caller aborts the removal request."
       }
     },
-    "CART_MANAGMENT": {
-      "name": "CART_MANAGMENT",
-      "prompt": "file:CART_MANAGMENT.txt",
+
+    "REMOVE_FROM_CART": {
+      "name": "REMOVE_FROM_CART",
+      "prompt": "file:REMOVE_FROM_CART.txt",
       "tools": [
-        "rag_find_products",
-        "add_to_cart",
-        "remove_from_cart"
+        "remove_from_cart",
+        "get_cart"
       ],
-      "description": "",
+      "description": "Removes the specified SKU from the cart and confirms the action aloud.",
       "handoffs": {
-        "CONSULTATION": "Use when the topic shifts to delivery details or order overview, e.g. customer asks to change the delivery date or address, customer asks “Что у меня сейчас в заказе?”, Cart-manager has just added items and the customer now wants to adjust schedule/ location",
-        "CONFIRMATION": "Use when all requested products are already in the cart, only cart, address, and schedule need a last check, customer signals “That’s everything for now.”"
+        "INTENT_CLASSIFIER": "Use after the removal is completed or cancelled."
       }
     },
-    "CONFIRMATION": {
-      "name": "CONFIRMATION",
+
+    "PRODUCT_SELECTOR": {
+      "name": "PRODUCT_SELECTOR",
+      "prompt": "file:PRODUCT_SELECTOR.txt",
+      "tools": [],
+      "description": "Suggests items from the caller’s last-month purchase history; if none fit, passes control to live catalogue search.",
+      "handoffs": {
+        "SELECT_PACKAGING": "Use when the caller chooses a suggested SKU from purchase history.",
+        "SEARCH_RAG": "Use when nothing suitable is found in purchase history or caller rejects suggestions.",
+        "INTENT_CLASSIFIER": "Use if the caller aborts adding a product or changes their mind."
+      }
+    },
+
+    "SEARCH_RAG": {
+      "name": "SEARCH_RAG",
+      "prompt": "file:SEARCH_RAG.txt",
+      "tools": [
+        "rag_find_products"
+      ],
+      "description": "Queries the live catalogue via rag_find_products; handles clarifying loops, tells when item is unavailable.",
+      "handoffs": {
+        "SELECT_PACKAGING": "Use once the caller picks a SKU from the search results.",
+        "INTENT_CLASSIFIER": "Use when the product cannot be found or the caller stops searching."
+      }
+    },
+
+    "SELECT_PACKAGING": {
+      "name": "SELECT_PACKAGING",
+      "prompt": "file:SELECT_PACKAGING.txt",
+      "tools": [],
+      "description": "Lists available pack sizes for the chosen SKU and captures the caller’s selection.",
+      "handoffs": {
+        "SELECT_QUANTITY": "Use after the caller selects a pack size.",
+        "PRODUCT_SELECTOR": "Use if none of the pack sizes suit the caller and they want to pick another product.",
+        "INTENT_CLASSIFIER": "Use when the caller cancels the operation."
+      }
+    },
+
+    "SELECT_QUANTITY": {
+      "name": "SELECT_QUANTITY",
+      "prompt": "file:SELECT_QUANTITY.txt",
+      "tools": [],
+      "description": "Reminds that only whole packs are sold, captures the number of packs, confirms the figure.",
+      "handoffs": {
+        "ADD_TO_CART_STAGE": "Use after the quantity is confirmed by the caller.",
+        "SELECT_PACKAGING": "Use if the caller decides to change the pack size.",
+        "INTENT_CLASSIFIER": "Use when the caller cancels the operation."
+      }
+    },
+
+    "ADD_TO_CART_STAGE": {
+      "name": "ADD_TO_CART_STAGE",
+      "prompt": "file:ADD_TO_CART_STAGE.txt",
+      "tools": [
+        "add_to_cart"
+      ],
+      "description": "Repeats SKU-pack-quantity, asks final yes/no, calls add_to_cart upon ‘yes’, confirms aloud.",
+      "handoffs": {
+        "INTENT_CLASSIFIER": "Use after successfully adding (or cancelling) a product."
+      }
+    },
+
+    "CONFIRMATION_STAGE": {
+      "name": "CONFIRMATION_STAGE",
       "prompt": "file:CONFIRMATION.txt",
       "tools": [
         "get_cart"
       ],
-      "description": "",
+      "description": "Reads out the actual cart, delivery date and address; asks if everything is correct or needs changes.",
       "handoffs": {
-        "CART_MANAGMENT": "Use as soon as the customer wants to add a new product (“Нужна куриная грудка”), search the catalogue (“Есть ли у вас индейка?”), remove / change quantity of an item, clarify packaging or weight",
-        "CONSULTANT": "Use when the topic shifts to delivery details or order overview, e.g. customer asks to change the delivery date or address, customer asks “Что у меня сейчас в заказе?”, Cart-manager has just added items and the customer now wants to adjust schedule/ location"
+        "GOODBYE": "Use when the caller confirms everything is correct and is ready to finish.",
+        "INTENT_CLASSIFIER": "Use when the caller wants to add/remove items or change schedule/location.",
+        "ENTRY": "Use when the caller wants to change delivery date or address from this stage."
       }
     },
+
     "GOODBYE": {
       "name": "GOODBYE",
       "prompt": "file:GOODBYE.txt",
       "tools": [
-        "add_to_cart"
+        "end_call"
       ],
-      "description": "",
+      "description": "Thanks the caller and terminates the call.",
       "handoffs": {}
     },
     "client": {
