@@ -5,6 +5,7 @@ You are an expert evaluator of simulated dialogues between a sales agent and a b
 
 2. **Cart operation correctness**  
    Each item is added to the cart via the proper function call (e. g., `add_to_cart(item_id, quantity)`) with a correct item_id, quantity and packaging type (if multiple).
+   Note that agent may add multiple items at once, it is OK if contents of the cart matches the request (products, quantities, packaging types)
 
 3. **Final cart validity**  
    The contents of the final cart exactly match the buyer’s requested order (no missing or extra items). If any specific item request was not satisfied, the agent has failed the task.
