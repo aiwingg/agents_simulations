@@ -62,7 +62,7 @@
       "tools": [],
       "description": "Suggests items from the caller’s last-month purchase history; if none fit, passes control to live catalogue search.",
       "handoffs": {
-        "SELECT_PACKAGING": "Use when the caller chooses a suggested SKU from purchase history.",
+        "SELECT_PACKAGING_AND_QUANTITY": "Use when the caller chooses a suggested SKU from purchase history.",
         "SEARCH_RAG": "Use when nothing suitable is found in purchase history or caller rejects suggestions.",
         "INTENT_CLASSIFIER": "Use if the caller aborts adding a product or changes their mind."
       }
@@ -76,31 +76,19 @@
       ],
       "description": "Queries the live catalogue via rag_find_products; handles clarifying loops, tells when item is unavailable.",
       "handoffs": {
-        "SELECT_PACKAGING": "Use once the caller picks a SKU from the search results.",
+        "SELECT_PACKAGING_AND_QUANTITY": "Use once the caller picks a SKU from the search results.",
         "INTENT_CLASSIFIER": "Use when the product cannot be found or the caller stops searching."
       }
     },
 
-    "SELECT_PACKAGING": {
-      "name": "SELECT_PACKAGING",
-      "prompt": "file:SELECT_PACKAGING.txt",
+    "SELECT_PACKAGING_AND_QUANTITY": {
+      "name": "SELECT_PACKAGING_AND_QUANTITY",
+      "prompt": "file:SELECT_PACKAGING_AND_QUANTITY.txt",
       "tools": [],
-      "description": "Lists available pack sizes for the chosen SKU and captures the caller’s selection.",
+      "description": "Lists available pack sizes for chosen SKUs, captures packaging selection, then captures quantity for each product sequentially.",
       "handoffs": {
-        "SELECT_QUANTITY": "Use after the caller selects a pack size.",
-        "PRODUCT_SELECTOR": "Use if none of the pack sizes suit the caller and they want to pick another product.",
-        "INTENT_CLASSIFIER": "Use when the caller cancels the operation."
-      }
-    },
-
-    "SELECT_QUANTITY": {
-      "name": "SELECT_QUANTITY",
-      "prompt": "file:SELECT_QUANTITY.txt",
-      "tools": [],
-      "description": "Reminds that only whole packs are sold, captures the number of packs, confirms the figure.",
-      "handoffs": {
-        "ADD_TO_CART_STAGE": "Use after the quantity is confirmed by the caller.",
-        "SELECT_PACKAGING": "Use if the caller decides to change the pack size.",
+        "ADD_TO_CART_STAGE": "Use after packaging and quantity are confirmed for all products.",
+        "PRODUCT_SELECTOR": "Use if the caller wants to select different products.",
         "INTENT_CLASSIFIER": "Use when the caller cancels the operation."
       }
     },
