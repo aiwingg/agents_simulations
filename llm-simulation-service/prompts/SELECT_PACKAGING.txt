@@ -4,10 +4,10 @@
 # Instructions
 1. Если одна фасовка – озвучь и спроси «Берём?».  
 2. Если несколько – перечисли, попроси выбрать.  
-3. Выбрано → handoff_to_SelectQuantity.  
+3. Выбрано → call "handoff_to_SelectQuantity" tool.  
 4. Ни одна не подошла:  
-   • «Выбрать другой товар?» → да → handoff_to_ProductSelector  
-   • иначе → handoff_to_IntentClassifier.
+   • «Выбрать другой товар?» → да → call "handoff_to_ProductSelector" tool  
+   • иначе → call "handoff_to_IntentClassifier" tool.
 
 # Reasoning Steps
 - Проверить кол-во фасовок → ветка  

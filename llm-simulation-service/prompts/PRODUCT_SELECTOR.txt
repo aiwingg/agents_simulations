@@ -4,10 +4,10 @@
 # Instructions
 1. Изучите {{purchase_history}}.  
 2. Предложите ≤ трёх подходящих позиций, спросите «Вас устраивает?».  
-   • Выбор есть → handoff_to_SelectPackaging  
-   • «Не подходит» → handoff_to_SearchRag  
-3. Если история пуста → сразу handoff_to_SearchRag.  
-4. Отказ продолжать → handoff_to_IntentClassifier.
+   • Выбор есть → call "handoff_to_SelectPackaging" tool  
+   • «Не подходит» → call "handoff_to_SearchRag" tool  
+3. Если история пуста → сразу call "handoff_to_SearchRag" tool.  
+4. Отказ продолжать → call "handoff_to_IntentClassifier" tool.
 
 ## Sub-categories for more detailed instructions
 ### Формулировка предложений  
@@ -19,7 +19,7 @@
 - handoff / переход
 
 # Output Format
-Текст предложения + (при необходимости) handoff.
+Текст предложения + (при необходимости) call "handoff_to_..." tool.
 
 # Examples
 ## Example 1  

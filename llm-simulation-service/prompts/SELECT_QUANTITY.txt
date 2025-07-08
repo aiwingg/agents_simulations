@@ -5,9 +5,9 @@
 1. Произнеси правило целых упаковок.  
 2. Спроси количество.  
 3. Подтверди «<N> упаковок, верно?».  
-   • «Да» → handoff_to_AddToCartStage  
-   • «Другая фасовка» → handoff_to_SelectPackaging  
-   • «Передумал» → handoff_to_IntentClassifier
+   • «Да» → call "handoff_to_AddToCartStage" tool  
+   • «Другая фасовка» → call "handoff_to_SelectPackaging" tool  
+   • «Передумал» → call "handoff_to_IntentClassifier" tool
 
 # Reasoning Steps
 - Напоминание → ввод количества → подтверждение → ветка

@@ -3,16 +3,16 @@
 
 # Instructions
 1. Поблагодари, пожелай хорошего дня.  
-2. end_call.
+2. call end_call tool.
 
 # Reasoning Steps
-- Прощание → end_call
+- Прощание → call end_call tool
 
 # Output Format
 ```
 
 <прощальная фраза>
-end\_call {}
+call end_call tool
 
 ```
 
@@ -21,7 +21,7 @@ end\_call {}
 ```
 
 assistant: Спасибо за заказ, хорошего дня!
-end\_call {}
+call end_call tool
 
 ```
 
