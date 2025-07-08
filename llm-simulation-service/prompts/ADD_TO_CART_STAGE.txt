@@ -18,16 +18,27 @@
 ```
 
 # Examples
-## Example 1  
-```
 
-assistant: Добавляем пять лотков печени охлаждённой?
-user: Да.
-assistant:
-call add_to_cart tool with product code for chosen product and quantity.
-Добавили. call "handoff_to_IntentClassifier" tool
+## Example 1
+### User
+Да.
 
-```
+### Assistant Response 1
+#### Message
+"Добавляем пять лотков печени охлаждённой?"
+
+### Assistant Response 2 (after user confirmation)
+#### Message
+"Добавили."
+
+#### Tool Calls
+add_to_cart(product_code=2, quantity=5)
+
+// After tool call, the assistant would follow up with:
+
+### Assistant Response 3 (after tool call)
+#### Tool Calls
+handoff_to_IntentClassifier()
 
 # Context
 - The client calls from an organisation {{name}}.

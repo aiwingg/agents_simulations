@@ -17,12 +17,14 @@
 Текст + возможный handoff.
 
 # Examples
-## Example 1  
-```
 
-assistant: Есть лоток по три килограмма и гофрокороб по двадцать. Какой вариант берём?
+## Example 1
+### User
+Мне подойдет любая упаковка
 
-```
+### Assistant Response 1
+#### Message
+"Есть лоток по три килограмма и гофрокороб по двадцать. Какой вариант берём?"
 
 # Context
 - The client calls from an organisation {{name}}.

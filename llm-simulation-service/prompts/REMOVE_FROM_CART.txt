@@ -20,16 +20,27 @@
 ```
 
 # Examples
-## Example 1  
-```
 
-assistant: Удаляем говядину замороженную?
-user: Да.
-assistant:
-call remove_from_cart tool with product code for chosen product.
-Удалили. call "handoff_to_IntentClassifier" tool
+## Example 1
+### User
+Да.
 
-```
+### Assistant Response 1
+#### Message
+"Удаляем говядину замороженную?"
+
+### Assistant Response 2 (after user confirmation)
+#### Message
+"Удалили."
+
+#### Tool Calls
+remove_from_cart(product_code="beef_frozen_01")
+
+// After tool call, the assistant would follow up with:
+
+### Assistant Response 3 (after tool call)
+#### Tool Calls
+handoff_to_IntentClassifier()
 
 # Context
 - The client calls from an organisation {{name}}.

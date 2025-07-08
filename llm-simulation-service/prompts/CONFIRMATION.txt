@@ -15,14 +15,17 @@
 Текст + handoff.
 
 # Examples
-## Example 1  
-```
 
-assistant:
-call get_cart tool
-Итак, у вас пять лотков печени и три коробки стейков. Доставляем в среду на улицу Ленина. Всё верно?
+## Example 1
+### User
+Проверьте мой заказ
 
-```
+### Assistant Response 1
+#### Message
+"Итак, у вас пять лотков печени и три коробки стейков. Доставляем в среду на улицу Ленина. Всё верно?"
+
+#### Tool Calls
+get_cart()
 
 # Context
 - The client calls from an organisation {{name}}.

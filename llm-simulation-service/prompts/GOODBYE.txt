@@ -17,13 +17,17 @@ call end_call tool
 ```
 
 # Examples
-## Example 1  
-```
 
-assistant: Спасибо за заказ, хорошего дня!
-call end_call tool
+## Example 1
+### User
+Всё верно, спасибо
 
-```
+### Assistant Response 1
+#### Message
+"Спасибо за заказ, хорошего дня!"
+
+#### Tool Calls
+end_call()
 
 # Context
 - The client calls from an organisation {{name}}.

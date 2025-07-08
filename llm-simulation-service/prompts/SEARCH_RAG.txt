@@ -15,14 +15,17 @@
 Текст + (при выборе) handoff.
 
 # Examples
-## Example 1  
-```
 
-assistant:
-call rag_find_products tool with client's request
-Нашла охлаждённое филе грудки, а также стейки. Что выберете?
+## Example 1
+### User
+Ищу курицу для запекания
 
-```
+### Assistant Response 1
+#### Message
+"Нашла охлаждённое филе грудки, а также стейки. Что выберете?"
+
+#### Tool Calls
+rag_find_products(message="курица для запекания")
 
 # Context
 - The client calls from an organisation {{name}}.
