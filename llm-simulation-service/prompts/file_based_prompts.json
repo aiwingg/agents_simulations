@@ -20,7 +20,7 @@
       "name": "INTENT_CLASSIFIER",
       "prompt": "file:INTENT_CLASSIFIER.txt",
       "tools": [],
-      "description": "Routes the conversation by analysing the caller’s last utterance; afterwards says a neutral helper phrase.",
+      "description": "Routes the conversation by analysing the caller's last utterance; afterwards says a neutral helper phrase.",
       "handoffs": {
         "PRODUCT_SELECTOR": "Use when the caller wants to add a product, search the catalogue, or continue choosing goods.",
         "CONFIRM_PRODUCT_FROM_CART": "Use when the caller wants to remove or change an item already present in the cart.",
@@ -60,9 +60,9 @@
       "name": "PRODUCT_SELECTOR",
       "prompt": "file:PRODUCT_SELECTOR.txt",
       "tools": [],
-      "description": "Suggests items from the caller’s last-month purchase history; if none fit, passes control to live catalogue search.",
+      "description": "Suggests items from the caller's last-month purchase history and handles packaging selection; if none fit, passes control to live catalogue search.",
       "handoffs": {
-        "SELECT_PACKAGING": "Use when the caller chooses a suggested SKU from purchase history.",
+        "SELECT_QUANTITY": "Use when the caller chooses a product and packaging, and wants to move to quantity selection.",
         "SEARCH_RAG": "Use when nothing suitable is found in purchase history or caller rejects suggestions.",
         "INTENT_CLASSIFIER": "Use if the caller aborts adding a product or changes their mind."
       }
@@ -74,22 +74,10 @@
       "tools": [
         "rag_find_products"
       ],
-      "description": "Queries the live catalogue via rag_find_products; handles clarifying loops, tells when item is unavailable.",
+      "description": "Queries the live catalogue via rag_find_products and handles packaging selection; handles clarifying loops, tells when item is unavailable.",
       "handoffs": {
-        "SELECT_PACKAGING": "Use once the caller picks a SKU from the search results.",
+        "SELECT_QUANTITY": "Use once the caller picks a product and packaging from the search results.",
         "INTENT_CLASSIFIER": "Use when the product cannot be found or the caller stops searching."
-      }
-    },
-
-    "SELECT_PACKAGING": {
-      "name": "SELECT_PACKAGING",
-      "prompt": "file:SELECT_PACKAGING.txt",
-      "tools": [],
-      "description": "Lists available pack sizes for the chosen SKU and captures the caller’s selection.",
-      "handoffs": {
-        "SELECT_QUANTITY": "Use after the caller selects a pack size.",
-        "PRODUCT_SELECTOR": "Use if none of the pack sizes suit the caller and they want to pick another product.",
-        "INTENT_CLASSIFIER": "Use when the caller cancels the operation."
       }
     },
 
@@ -100,7 +88,7 @@
       "description": "Reminds that only whole packs are sold, captures the number of packs, confirms the figure.",
       "handoffs": {
         "ADD_TO_CART_STAGE": "Use after the quantity is confirmed by the caller.",
-        "SELECT_PACKAGING": "Use if the caller decides to change the pack size.",
+        "PRODUCT_SELECTOR": "Use if the caller decides to change the product entirely.",
         "INTENT_CLASSIFIER": "Use when the caller cancels the operation."
       }
     },
@@ -111,7 +99,7 @@
       "tools": [
         "add_to_cart"
       ],
-      "description": "Repeats SKU-pack-quantity, asks final yes/no, calls add_to_cart upon ‘yes’, confirms aloud.",
+      "description": "Repeats SKU-pack-quantity, asks final yes/no, calls add_to_cart upon 'yes', confirms aloud.",
       "handoffs": {
         "INTENT_CLASSIFIER": "Use after successfully adding (or cancelling) a product."
       }
