@@ -4,8 +4,7 @@ Creates Tool subclasses that properly handle session isolation and contracts fro
 """
 
 import json
-from typing import List, Dict, Any, Optional, Type
-from typing_extensions import Annotated
+from typing import List, Type
 from pydantic import BaseModel, Field
 from autogen_core import CancellationToken
 from autogen_core.tools import BaseTool
@@ -31,21 +30,19 @@ class CartItem(BaseModel):
 
 
 class RagFindProductsArgs(BaseModel):
-    message: Annotated[
-        str,
-        "Описание товаров для поиска. Может содержать производителя, термическое состояние, способ упаковки, животное, объект, дополнительные указания",
-    ]
+    message: str = Field(
+        description="Описание товаров для поиска. Может содержать производителя, термическое состояние, способ упаковки, животное, объект, дополнительные указания"
+    )
 
 
 class AddToCartArgs(BaseModel):
-    items: Annotated[
-        List[CartItem],
-        "Список продуктов с количеством. Каждый элемент содержит код продукта, количество и опционально способ упаковки",
-    ]
+    items: List[CartItem] = Field(
+        description="Список продуктов с количеством. Каждый элемент содержит код продукта, количество и опционально способ упаковки"
+    )
 
 
 class RemoveFromCartArgs(BaseModel):
-    items: Annotated[List[str], "Список строк, где каждая строка равна коду продукта для удаления"]
+    items: List[str] = Field(description="Список строк, где каждая строка равна коду продукта для удаления")
 
 
 class GetCartArgs(BaseModel):
@@ -53,21 +50,21 @@ class GetCartArgs(BaseModel):
 
 
 class ChangeDeliveryDateArgs(BaseModel):
-    delivery_date: Annotated[str, "Дата доставки в формате YYYY-MM-DD"]
+    delivery_date: str = Field(description="Дата доставки в формате YYYY-MM-DD")
 
 
 class SetCurrentLocationArgs(BaseModel):
-    location_id: Annotated[
-        int, "Номер адреса, на который необходимо оформить заказ. Можно выбрать из списка доступных адресов"
-    ]
+    location_id: int = Field(
+        description="Номер адреса, на который необходимо оформить заказ. Можно выбрать из списка доступных адресов"
+    )
 
 
 class CallTransferArgs(BaseModel):
-    reason: Annotated[str, "Reason for transferring the call"]
+    reason: str = Field(description="Reason for transferring the call")
 
 
 class EndCallArgs(BaseModel):
-    reason: Annotated[str, "Reason for ending the call"] = "User decided to end the conversation"
+    reason: str = Field(description="Причина завершения звонка")
 
 
 class JsonOutput(BaseModel):
