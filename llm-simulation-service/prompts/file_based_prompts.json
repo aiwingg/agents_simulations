@@ -23,25 +23,14 @@
       "description": "Routes the conversation by analysing the caller’s last utterance; afterwards says a neutral helper phrase.",
       "handoffs": {
         "PRODUCT_SELECTOR": "Use when the caller wants to add a product, search the catalogue, or continue choosing goods.",
-        "CONFIRM_PRODUCT_FROM_CART": "Use when the caller wants to remove or change an item already present in the cart.",
+        "REMOVE_FROM_CART": "Use when the caller wants to remove or change an item already present in the cart.",
         "ENTRY": "Use when the caller wants to change delivery date or address.",
         "CONFIRMATION_STAGE": "Use when the caller asks what is already in the order or signals they may be ready to finish.",
         "GOODBYE": "Use when the caller explicitly ends the conversation after final confirmation."
       }
     },
 
-    "CONFIRM_PRODUCT_FROM_CART": {
-      "name": "CONFIRM_PRODUCT_FROM_CART",
-      "prompt": "file:CONFIRM_PRODUCT_FROM_CART.txt",
-      "tools": [
-        "get_cart"
-      ],
-      "description": "Finds the exact SKU(s) the caller refers to (for removal / change); clarifies if ambiguous.",
-      "handoffs": {
-        "REMOVE_FROM_CART": "Use once a single SKU has been unambiguously identified and confirmed for removal.",
-        "INTENT_CLASSIFIER": "Use if no matching SKU is found or the caller aborts the removal request."
-      }
-    },
+
 
     "REMOVE_FROM_CART": {
       "name": "REMOVE_FROM_CART",
@@ -50,7 +39,7 @@
         "remove_from_cart",
         "get_cart"
       ],
-      "description": "Removes the specified SKU from the cart and confirms the action aloud.",
+      "description": "Handles the complete product removal process: finds exact SKU(s) the caller refers to, clarifies ambiguous requests, confirms removal, and executes the removal action.",
       "handoffs": {
         "INTENT_CLASSIFIER": "Use after the removal is completed or cancelled."
       }
