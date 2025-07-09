@@ -17,6 +17,11 @@ class Config:
     OPENAI_API_KEY: str = os.getenv("OPENAI_API_KEY", "")
     OPENAI_MODEL: str = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
 
+    # Target AI Configuration
+    TARGET_API_KEY: str = os.getenv("TARGET_API_KEY", "")
+    TARGET_BASE_URL: str = os.getenv("TARGET_BASE_URL", "https://app.targetai.ai")
+    TARGET_COMPANY_ID: int = int(os.getenv("TARGET_COMPANY_ID", "54"))
+
     # Conversation Configuration
     MAX_TURNS: int = int(os.getenv("MAX_TURNS", "30"))
     TIMEOUT_SEC: int = int(os.getenv("TIMEOUT_SEC", "90"))
@@ -51,6 +56,15 @@ class Config:
         """Validate required configuration"""
         if not cls.OPENAI_API_KEY:
             raise ValueError("OPENAI_API_KEY environment variable is required")
+        return True
+
+    @classmethod
+    def validate_target_config(cls) -> bool:
+        """Validate Target AI configuration for agent upload"""
+        if not cls.TARGET_API_KEY:
+            raise ValueError("TARGET_API_KEY environment variable is required for agent upload")
+        if cls.TARGET_COMPANY_ID <= 0:
+            raise ValueError("TARGET_COMPANY_ID must be a positive integer")
         return True
 
     @classmethod

@@ -1,0 +1,12 @@
+{
+    "ENTRY": 710,
+    "INTENT_CLASSIFIER": 711,
+    "CONFIRM_PRODUCT_FROM_CART": null,
+    "REMOVE_FROM_CART": null,
+    "PRODUCT_SELECTOR": null,
+    "SEARCH_RAG": null,
+    "SELECT_PACKAGING_AND_QUANTITY": null,
+    "ADD_TO_CART_STAGE": null,
+    "CONFIRMATION_STAGE": null,
+    "GOODBYE": null
+}
