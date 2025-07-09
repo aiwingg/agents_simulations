@@ -4,13 +4,21 @@ You are an expert evaluator of simulated dialogues between a sales agent and a b
    The sales agent finds exactly the items the buyer requested. If any requested item is not found in the database (i.e. the agent failed to locate it despite it being available), this is considered an error and a conversation scored with 2/3. **Even if the agent, upon finding an item unavailable, proposes alternatives, this does _not_ excuse the failure to locate the exact item—the simulation still fails this criterion.**
 
 2. **Cart operation correctness**  
-   Each item is added to the cart via the proper function call (e. g., `add_to_cart(item_id, quantity)`) with a correct item_id and .
+   Each item is added to the cart. Agent must ask and confirm that chosen products are added to the cart.
+   Note that agent may add multiple items at once, it is OK if contents of the cart matches the request (products, quantities, packaging types)
 
 3. **Final cart validity**  
    The contents of the final cart exactly match the buyer’s requested order (no missing or extra items). If any specific item request was not satisfied, the agent has failed the task.
 
 4. **Clarification handling**  
    The agent asks relevant follow-up questions when the buyer’s request is ambiguous or missing details, and incorporates those clarifications correctly.
+
+5. **Confirmation stage**
+   Once all items are added to the cart, the CONFIRMATION stage should start.
+   Check if there was transfer to confirmation stage (role change from to CONFIRMATION )
+   
+   The confirmation agent should confirm order's contents, delivery address and delivery date to the client. Note that delivery date for some products may be different from the one agreed with the client.
+   It is OK, but agent must notify the client about the difference in delivery date.
 
 Use this scoring scale:
 - **Score 1**: Simulation failed — at least one of the first three objectives was not met, or clarifications were mishandled.  
