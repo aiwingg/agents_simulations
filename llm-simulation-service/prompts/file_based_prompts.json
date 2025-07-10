@@ -77,7 +77,6 @@
       "description": "Lists available pack sizes for chosen SKUs, captures packaging selection, then captures quantity for each product sequentially.",
       "handoffs": {
         "ADD_TO_CART_STAGE": "Use after packaging and quantity are confirmed for all products.",
-        "PRODUCT_SELECTOR": "Use if the caller wants to select different products.",
         "INTENT_CLASSIFIER": "Use when the caller cancels the operation."
       }
     },
