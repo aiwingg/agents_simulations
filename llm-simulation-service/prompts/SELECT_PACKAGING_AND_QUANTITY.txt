@@ -109,7 +109,7 @@
 # Context
 - The client calls from an organisation {{name}}.
 - Current date is {{current_date}}
-- Выбранные товары с вариантами упаковки: {{chosen_product_codes}}
+- Выбранные товары с вариантами упаковки: {{chosen_products}}
 
 # Final instructions and prompt to think step by step
 {{GLOBAL_INSTRUCTIONS}} 
