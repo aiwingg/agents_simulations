@@ -36,8 +36,7 @@
       "name": "REMOVE_FROM_CART",
       "prompt": "file:REMOVE_FROM_CART.txt",
       "tools": [
-        "remove_from_cart",
-        "get_cart"
+        "remove_from_cart"
       ],
       "description": "Handles the complete product removal process: finds exact SKU(s) the caller refers to, clarifies ambiguous requests, confirms removal, and executes the removal action.",
       "handoffs": {
@@ -73,32 +72,19 @@
     "SELECT_PACKAGING_AND_QUANTITY": {
       "name": "SELECT_PACKAGING_AND_QUANTITY",
       "prompt": "file:SELECT_PACKAGING_AND_QUANTITY.txt",
-      "tools": [],
-      "description": "Lists available pack sizes for chosen SKUs, captures packaging selection, then captures quantity for each product sequentially.",
-      "handoffs": {
-        "ADD_TO_CART_STAGE": "Use after packaging and quantity are confirmed for all products.",
-        "INTENT_CLASSIFIER": "Use when the caller cancels the operation."
-      }
-    },
-
-    "ADD_TO_CART_STAGE": {
-      "name": "ADD_TO_CART_STAGE",
-      "prompt": "file:ADD_TO_CART_STAGE.txt",
       "tools": [
         "add_to_cart"
       ],
-      "description": "Repeats SKU-pack-quantity, asks final yes/no, calls add_to_cart upon ‘yes’, confirms aloud.",
+      "description": "Lists available pack sizes for chosen SKUs, captures packaging selection, captures quantity for each product sequentially, then adds all products to cart.",
       "handoffs": {
-        "INTENT_CLASSIFIER": "Use after successfully adding (or cancelling) a product."
+        "INTENT_CLASSIFIER": "Use after successfully adding products to cart or when the caller cancels the operation."
       }
     },
 
     "CONFIRMATION_STAGE": {
       "name": "CONFIRMATION_STAGE",
       "prompt": "file:CONFIRMATION.txt",
-      "tools": [
-        "get_cart"
-      ],
+      "tools": [],
       "description": "Reads out the actual cart, delivery date and address; asks if everything is correct or needs changes.",
       "handoffs": {
         "GOODBYE": "Use when the caller confirms everything is correct and is ready to finish.",
