@@ -52,12 +52,6 @@
 
 Доставляем на [адрес]. Всё верно? Нужно что-то изменить?"
 
-# Context
-- The client calls from an organisation {{name}}.
-- The client has following addresses: {{locations}}
-- Current date is {{current_date}}
-- The client has agreed to accept deliveries on the following days: {{delivery_days}}
-
 # Final instructions and prompt to think step by step
 {{GLOBAL_INSTRUCTIONS}}
 
