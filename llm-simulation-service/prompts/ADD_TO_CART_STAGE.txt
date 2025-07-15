@@ -123,4 +123,4 @@ handoff_to_IntentClassifier()
 - Товары для добавления, с выбранной упаковкой и количеством: {{chosen_products_packaging_codes}}
 
 # Final instructions and prompt to think step by step
-{{GLOBAL_INSTRUCTIONS}} 
+ 

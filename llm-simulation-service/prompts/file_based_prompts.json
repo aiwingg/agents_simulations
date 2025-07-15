@@ -48,6 +48,7 @@
       "name": "PRODUCT_SELECTOR",
       "prompt": "file:PRODUCT_SELECTOR.txt",
       "tools": [
+        "find_history",
         "save_product_from_history"
       ],
       "description": "Suggests items from the caller’s last-month purchase history; once proper item is found, calls save_product_from_history with its code, and asks if the caller wants to add more products.",

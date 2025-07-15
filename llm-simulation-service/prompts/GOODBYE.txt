@@ -34,4 +34,4 @@ end_call()
 - Current date is {{current_date}}
 
 # Final instructions and prompt to think step by step
-{{GLOBAL_INSTRUCTIONS}} 
+ 

@@ -131,6 +131,6 @@ handoff_to_ENTRY()
 - Current date is {{current_date}}
 
 # Final instructions and prompt to think step by step
-{{GLOBAL_INSTRUCTIONS}}
+
 
 Думай пошагово: «проанализируй историю → определи выполнение предыдущего намерения → определи новое намерение → прими решение → действуй».
